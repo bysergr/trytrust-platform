@@ -3,8 +3,8 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
-import { BarChart3, Bot, ChevronsUpDown, FileText, LogOut, Plus, ShieldCheck } from "lucide-react"
-import { RappiConfigButton, RappiConfigPanel, useRappiStatus } from "@/components/rappi-config"
+import { BarChart3, Bot, ChevronsUpDown, FileText, LogOut, Plus, ShieldCheck, Store } from "lucide-react"
+import { RappiConfigPanel, useRappiStatus } from "@/components/rappi-config"
 import type { HankoUser, SiteRecord } from "@/lib/types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -47,7 +47,6 @@ export function AppShell({
   const [rappiOpen, setRappiOpen] = useState(false)
   const {
     status: rappiStatus,
-    reachable: rappiReachable,
     refresh: refreshRappi,
   } = useRappiStatus(rappiOpen)
 
@@ -131,8 +130,7 @@ export function AppShell({
         </SidebarContent>
 
         <SidebarFooter className="p-2.5 group-data-[collapsible=icon]:p-2">
-          <RappiConfigButton status={rappiStatus} onClick={() => setRappiOpen(true)} />
-          <UserFooterMenu user={user} />
+          <UserFooterMenu user={user} onConfigureRappi={() => setRappiOpen(true)} />
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
@@ -140,7 +138,6 @@ export function AppShell({
       <RappiConfigPanel
         open={rappiOpen}
         status={rappiStatus}
-        reachable={rappiReachable}
         onOpenChange={setRappiOpen}
         onRefresh={refreshRappi}
       />
@@ -186,7 +183,13 @@ function NavItem({
   )
 }
 
-function UserFooterMenu({ user }: { user: HankoUser }) {
+function UserFooterMenu({
+  user,
+  onConfigureRappi,
+}: {
+  user: HankoUser
+  onConfigureRappi: () => void
+}) {
   const router = useRouter()
   const { state, isMobile } = useSidebar()
   const isCollapsed = state === "collapsed" && !isMobile
@@ -240,6 +243,10 @@ function UserFooterMenu({ user }: { user: HankoUser }) {
         sideOffset={8}
         className="w-56"
       >
+        <DropdownMenuItem onClick={onConfigureRappi}>
+          <Store />
+          Configurar Rappi
+        </DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/security" />}>
           <ShieldCheck />
           Security & passkeys
