@@ -2,8 +2,7 @@
 // The bridge runs on the credential machine (127.0.0.1); the token never
 // leaves it — this client only ever sees masked status labels.
 
-export const BRIDGE_URL =
-  process.env.NEXT_PUBLIC_RAPPI_BRIDGE_URL ?? "http://localhost:8010";
+export const BRIDGE_URL = process.env.NEXT_PUBLIC_KERNEL_API_URL;
 
 export type SessionStatus = {
   state: "idle" | "waiting_login" | "captured" | "error";
