@@ -1,4 +1,12 @@
-import type { AuditEvent, Mandate } from "@/lib/types"
+import type {
+  AgentAuditEvent,
+  AgentChainVerification,
+  AgentEscalation,
+  AgentMandate,
+  AgentWatch,
+  AuditEvent,
+  Mandate,
+} from "@/lib/types"
 
 const kernelUrl = () => process.env.KERNEL_API_URL?.replace(/\/$/, "")
 
@@ -62,6 +70,79 @@ export async function getAuditEvents(mandate: Mandate): Promise<AuditEvent[]> {
   }
   const id = mandate.mandate_id ?? mandate.id ?? mandate.jti
   return kernelFetch(`/audit/events?mandate_id=${encodeURIComponent(id)}&limit=1000`)
+}
+
+// ── the agent lane ───────────────────────────────────────────────────────────
+// `/agent/*` reads a different store from `/mandates` and `/audit/events`: the
+// kernel lane keeps a registry, the agent lane keeps its own tables. That is
+// why none of these take a jti from `getActiveMandate` — they let the kernel
+// resolve the mandate the agent actually spends under, the same fallback
+// `/agent/ask` applies to an id it does not recognise.
+
+export async function getAgentMandate(): Promise<AgentMandate> {
+  return kernelFetch("/agent/mandate")
+}
+
+export async function getPendingEscalations(): Promise<AgentEscalation[]> {
+  return kernelFetch("/agent/escalations")
+}
+
+export async function getAgentAudit(limit: number): Promise<AgentAuditEvent[]> {
+  return kernelFetch(`/agent/audit?limit=${limit}`)
+}
+
+export async function verifyAgentChain(): Promise<AgentChainVerification> {
+  return kernelFetch("/agent/verify")
+}
+
+export async function getAgentLimits(): Promise<Record<string, unknown>> {
+  return kernelFetch("/agent/limits")
+}
+
+export async function getWatches(): Promise<AgentWatch[]> {
+  return kernelFetch("/agent/watches?status=active")
+}
+
+/**
+ * The threshold is composed here, from a number, rather than accepted from the
+ * caller: a watch buys while nobody is watching, and JsonLogic the browser
+ * wrote is not something to hand a poller.
+ */
+export async function createWatch(input: { maxPrice: number; query: Record<string, string> }) {
+  const { agentId, mandateJti, ownerId } = await agentIdentity()
+  return kernelPost<{ watch_id: string; threshold: string }>("/agent/watches", {
+    agent_id: agentId,
+    mandate_jti: mandateJti,
+    query: input.query,
+    max_price: input.maxPrice,
+    autobuy: true,
+    created_by: ownerId,
+  })
+}
+
+type AgentIdentity = { agentId: string; mandateJti: string; ownerId: string }
+
+let identity: AgentIdentity | null = null
+let identityAt = 0
+
+/**
+ * `/agent/ask` resolves an agent name or an unknown jti for itself, but
+ * `/agent/watches` writes what it is handed: a watch created against a name
+ * would never fire, and `created_by` is a foreign key into `people`. Cached
+ * briefly — re-seeding the kernel is a normal thing to do in development.
+ */
+async function agentIdentity(): Promise<AgentIdentity> {
+  if (identity && Date.now() - identityAt < 60_000) return identity
+  const [agents, mandate] = await Promise.all([
+    kernelFetch<Array<{ id: string; name: string; owner_id: string }>>("/agent/agents"),
+    getAgentMandate(),
+  ])
+  const wanted = process.env.DEFAULT_AGENT_ID ?? "agt_flights"
+  const agent = agents.find((a) => a.id === wanted || a.name === wanted) ?? agents[0]
+  if (!agent) throw new Error("KERNEL_NOT_SEEDED")
+  identity = { agentId: agent.id, mandateJti: mandate.jti, ownerId: agent.owner_id }
+  identityAt = Date.now()
+  return identity
 }
 
 function mockAgentResponse(text: string, sessionId?: string) {

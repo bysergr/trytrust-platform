@@ -39,6 +39,26 @@ Existing non-Google test accounts should be removed from the Hanko project befor
 - Public sites expose only the binding fields selected at publish time.
 - Analytics never combines monetary totals from different currencies.
 
+## Voice
+
+`/voice` is a speech-to-speech console over the same agent as `/`. It plans and
+pays nothing of its own: `ask_agent` posts a turn to `/api/agent/chat` and the
+kernel's graph decides behind the mandate gate. Set `OPENAI_API_KEY` for the
+realtime model; the rest of the app runs without it.
+
+The kernel's chat has three shapes of turn, so `/api/agent/chat` takes an
+optional `turn` (`request` | `guidance` | `approve` | `reject`, default
+`request`). A `request` or `guidance` turn whose text is a bare "approve" or
+"yes" is refused with `DECISION_NEEDS_EXPLICIT_TURN`, so a decision on a
+pending escalation cannot slip through without the caller making it
+deliberately. In the voice console `approve_pending_purchase` and
+`create_watch` are declared `needsApproval`, which blocks the session until the
+operator clicks.
+
+Reads that the agent lane keeps in its own store — not the registry behind
+`/mandates` and `/audit/events` — are exposed at `/api/agent/mandate`,
+`/escalations`, `/watches`, `/audit` and `/limits`.
+
 ## Verification
 
 ```bash
