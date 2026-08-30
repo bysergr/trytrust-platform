@@ -36,8 +36,14 @@ export default function Home() {
     setThinking(true);
     try {
       if (KERNEL_URL) {
-        const reply = await askKernel(text);
-        setMessages((previous) => [...previous, { role: "assistant", text: reply }]);
+        const { reply, agent_name } = await askKernel(text);
+        setMessages((previous) => [
+          ...previous,
+          {
+            role: "assistant",
+            text: agent_name ? `[${agent_name}] ${reply}` : reply,
+          },
+        ]);
       } else {
         setMessages((previous) => [
           ...previous,
