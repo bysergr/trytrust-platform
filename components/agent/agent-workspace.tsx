@@ -5,13 +5,10 @@ import { useRouter } from "next/navigation"
 import {
   ArrowUp,
   Check,
-  CheckCheck,
   Copy,
   PanelRight,
   Save,
   ShieldCheck,
-  Sparkles,
-  Wand2,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { AgentChatResponse, GeneratedArtifact } from "@/lib/types"
@@ -28,17 +25,9 @@ type Message = {
   role: "user" | "agent"
   text: string
   at: string
-  followUps?: string[]
   proposal?: Record<string, unknown> | null
   artifact?: GeneratedArtifact
 }
-
-const DEFAULT_PROMPTS = [
-  "Find a direct flight to Miami under $180",
-  "Build a transaction intelligence dashboard",
-  "Show my merchant spend & mandate limits",
-  "Audit flight policy and spending boundaries",
-]
 
 const MIN_SPLIT = 25
 const MAX_SPLIT = 75
@@ -55,11 +44,6 @@ export function AgentWorkspace() {
       role: "agent",
       text: "Tell me what you need. I can search approved merchants, propose policy-compliant purchases, or turn your activity into a live interactive site.",
       at: "Now",
-      followUps: [
-        "Find a flight to Miami under $180",
-        "Build a transaction dashboard",
-        "Show my merchant spend",
-      ],
     },
   ])
 
@@ -124,8 +108,8 @@ export function AgentWorkspace() {
     setSplitRatio(DEFAULT_SPLIT)
   }
 
-  async function send(prompt?: string) {
-    const value = (prompt ?? text).trim()
+  async function send() {
+    const value = text.trim()
     if (!value || sending) return
     setText("")
     setSending(true)
@@ -135,7 +119,7 @@ export function AgentWorkspace() {
     const userMsgId = crypto.randomUUID()
 
     setMessages((current) => [
-      ...current.map((message) => message.followUps ? { ...message, followUps: undefined } : message),
+      ...current,
       { id: userMsgId, role: "user", text: value, at: timeString },
     ])
     try {
@@ -152,20 +136,6 @@ export function AgentWorkspace() {
 
       setSessionId(result.sessionId)
 
-      const isFlight = /flight|bog|mia|miami|ticket|travel/i.test(value)
-
-      const followUps = isFlight
-        ? [
-            "Authorize flight with mandate passkey",
-            "Compare with alternative airlines",
-            "Show recent flight transaction history",
-          ]
-        : [
-            "Filter transactions by highest spend",
-            "Export audit certificate",
-            "Update mandate limit boundaries",
-          ]
-
       setMessages((current) => [
         ...current,
         ...result.replies.map((reply, idx) => ({
@@ -173,7 +143,6 @@ export function AgentWorkspace() {
           role: "agent" as const,
           text: reply,
           at: replyTime,
-          followUps: idx === result.replies.length - 1 ? followUps : undefined,
           proposal: idx === 0 ? result.run?.proposal : undefined,
           artifact: idx === 0 ? result.artifact ?? undefined : undefined,
         })),
@@ -252,7 +221,6 @@ export function AgentWorkspace() {
               <BeautifulMessageCard
                 key={message.id}
                 message={message}
-                onPromptClick={(prompt) => send(prompt)}
                 onViewPreview={(selectedArtifact) => {
                   setArtifact(selectedArtifact)
                   setView("preview")
@@ -270,20 +238,6 @@ export function AgentWorkspace() {
         {/* Floating Prompt Bar / Composer */}
         <div className="border-t border-border/70 bg-background/95 backdrop-blur-xl p-3 sm:p-4 shrink-0">
           <div className="mx-auto max-w-2xl">
-            {/* Quick suggestion chips */}
-            <div className="mb-2.5 flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-              {DEFAULT_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  onClick={() => send(prompt)}
-                  className="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-card/80 px-3 py-1.5 text-[10.5px] font-medium text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.06] hover:text-foreground active:scale-95 shadow-xs"
-                >
-                  <Sparkles className="size-3 text-primary/70 group-hover:text-primary transition-colors" />
-                  <span>{prompt}</span>
-                </button>
-              ))}
-            </div>
-
             {/* AI Composer Box */}
             <div className="group relative rounded-3xl border border-border/80 bg-card/90 p-2.5 shadow-[0_12px_40px_-20px_rgba(29,78,216,0.2)] transition-all duration-300 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10">
               <Textarea
@@ -300,28 +254,7 @@ export function AgentWorkspace() {
               />
 
               <div className="flex items-center justify-between px-1 pt-1">
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full size-7"
-                    onClick={() => send("Show transaction dashboard")}
-                    title="Generate visual intelligence"
-                  >
-                    <Wand2 className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full size-7"
-                    onClick={() => send("Check active mandate boundaries and audit history")}
-                    title="Inspect mandate limits"
-                  >
-                    <ShieldCheck className="size-3.5" />
-                  </Button>
-                </div>
+                <span className="px-2 font-mono text-[9px] text-muted-foreground">Enter to send · Shift+Enter for a new line</span>
 
                 <Button
                   aria-label="Send message"
@@ -478,11 +411,9 @@ function MinimalThinkingLoader({ seconds }: { seconds: number }) {
  */
 function BeautifulMessageCard({
   message,
-  onPromptClick,
   onViewPreview,
 }: {
   message: Message
-  onPromptClick: (prompt: string) => void
   onViewPreview: (artifact: GeneratedArtifact) => void
 }) {
   const isAgent = message.role === "agent"
@@ -501,10 +432,7 @@ function BeautifulMessageCard({
       <div className="flex justify-end enter">
         <div className="group relative max-w-[85%] rounded-2xl rounded-tr-sm bg-[#0a1024] px-4 py-3 text-sm leading-relaxed text-slate-100 shadow-sm border border-slate-800/80">
           <p className="whitespace-pre-wrap">{message.text}</p>
-          <div className="mt-2 flex items-center justify-end gap-1.5 font-mono text-[9px] text-slate-400">
-            <span>{message.at}</span>
-            <CheckCheck className="size-3 text-blue-400" />
-          </div>
+          <div className="mt-1 text-right font-mono text-[9px] leading-none text-slate-400">{message.at}</div>
         </div>
       </div>
     )
@@ -592,27 +520,6 @@ function BeautifulMessageCard({
           </button>
         </div>
       </div>
-
-      {/* Beautiful UI 03: Follow-Up Action Pills */}
-      {message.followUps && message.followUps.length > 0 && (
-        <div className="flex flex-col gap-1.5 pl-0.5">
-          <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-            Follow-ups
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {message.followUps.map((followUp, idx) => (
-              <button
-                key={idx}
-                onClick={() => onPromptClick(followUp)}
-                className="group inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/[0.04] px-3 py-1 text-xs text-foreground transition-all duration-150 hover:border-primary/50 hover:bg-primary/10 hover:shadow-xs active:scale-98"
-              >
-                <Sparkles className="size-2.5 text-primary" />
-                <span>{followUp}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
