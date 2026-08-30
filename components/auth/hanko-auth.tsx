@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 const LOGIN_CACHE = "trytrust-hanko-login"
 const REGISTRATION_CACHE = "trytrust-hanko-registration"
 const FLOW_KEY = "trytrust-hanko-active-flow"
+const SERVER_REDIRECT_KEY = "trytrust-hanko-server-redirect"
 type AuthFlow = "login" | "registration"
 type GoogleAction = {
   enabled: boolean
@@ -36,9 +37,19 @@ export function HankoAuth({ next = "/" }: { next?: string }) {
       if (cancelled) return
       hankoRef.current = hanko
       setPlatformPasskey(available)
+      const redirectToWorkspace = () => {
+        const previous = Number(window.sessionStorage.getItem(SERVER_REDIRECT_KEY) ?? 0)
+        if (Date.now() - previous < 10_000) {
+          setLoading(undefined)
+          setError("Your Google session is valid, but TryTrust could not finish server setup. Please try again after the deployment configuration is updated.")
+          return
+        }
+        window.sessionStorage.setItem(SERVER_REDIRECT_KEY, String(Date.now()))
+        window.location.assign(next)
+      }
       cleanup = hanko.onSessionCreated(() => {
         window.sessionStorage.removeItem(FLOW_KEY)
-        window.location.assign(next)
+        redirectToWorkspace()
       })
 
       const activeFlow = window.sessionStorage.getItem(FLOW_KEY) as AuthFlow | null
@@ -55,7 +66,7 @@ export function HankoAuth({ next = "/" }: { next?: string }) {
 
       const session = await hanko.validateSession()
       if (session.is_valid) {
-        window.location.assign(next)
+        redirectToWorkspace()
       } else if (!isCallback && hanko.getSessionToken()) {
         await hanko.logout()
       }
@@ -70,6 +81,7 @@ export function HankoAuth({ next = "/" }: { next?: string }) {
   async function continueWithGoogle() {
     const hanko = hankoRef.current
     if (!hanko) return setError("Authentication is still loading. Please try again.")
+    window.sessionStorage.removeItem(SERVER_REDIRECT_KEY)
     setError(undefined); setLoading("google")
     try {
       const { generateCodeVerifier, setStoredCodeVerifier } = await import("@teamhanko/hanko-elements")
@@ -93,6 +105,7 @@ export function HankoAuth({ next = "/" }: { next?: string }) {
   async function signInWithPasskey() {
     const hanko = hankoRef.current
     if (!hanko) return setError("Authentication is still loading. Please try again.")
+    window.sessionStorage.removeItem(SERVER_REDIRECT_KEY)
     setError(undefined); setLoading("passkey")
     try {
       window.sessionStorage.setItem(FLOW_KEY, "login")

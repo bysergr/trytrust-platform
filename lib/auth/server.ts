@@ -46,6 +46,7 @@ export const getCurrentUser = cache(async (): Promise<HankoUser | null> => {
   }
   if (!token) return null
 
+  let user: HankoUser
   try {
     const validation = await fetch(`${api}/sessions/validate`, {
       method: "GET",
@@ -68,19 +69,25 @@ export const getCurrentUser = cache(async (): Promise<HankoUser | null> => {
     const passkeyCount = profile?.passkeys?.length
       ?? profile?.webauthn_credentials?.filter((credential) => !credential.mfa_only).length
       ?? 0
-    const user: HankoUser = {
+    user = {
       id,
       email,
       name: profile?.name || session.claims?.name || email.split("@")[0] || "TryTrust user",
       avatarUrl: profile?.picture || session.claims?.picture || null,
       hasAccountPasskey: passkeyCount > 0,
     }
-    await syncUser(user)
-    return user
   } catch (error) {
     console.error("Hanko validation failed", error)
     return null
   }
+
+  try {
+    await syncUser(user)
+  } catch (error) {
+    console.error("TryTrust user synchronization failed", error)
+    throw error
+  }
+  return user
 })
 
 export async function requireUser() {
