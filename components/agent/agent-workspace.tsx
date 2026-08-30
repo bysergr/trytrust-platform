@@ -6,8 +6,6 @@ import {
   ArrowUp,
   Check,
   CheckCheck,
-  ChevronDown,
-  ChevronUp,
   Copy,
   PanelRight,
   Save,
@@ -17,7 +15,6 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import type { AgentChatResponse, GeneratedArtifact } from "@/lib/types"
-import { fallbackArtifact } from "@/lib/artifacts/fallback"
 import { ArtifactFrame } from "@/components/sites/artifact-frame"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,12 +28,9 @@ type Message = {
   role: "user" | "agent"
   text: string
   at: string
-  elapsed?: string
-  toolCalls?: Array<{ name: string; status: "ok" | "running"; tag: string }>
-  sources?: Array<{ title: string; category: string; host: string }>
   followUps?: string[]
   proposal?: Record<string, unknown> | null
-  thinkingSteps?: Array<{ title: string; description: string; tag: string }>
+  artifact?: GeneratedArtifact
 }
 
 const DEFAULT_PROMPTS = [
@@ -61,15 +55,6 @@ export function AgentWorkspace() {
       role: "agent",
       text: "Tell me what you need. I can search approved merchants, propose policy-compliant purchases, or turn your activity into a live interactive site.",
       at: "Now",
-      elapsed: "0.4s",
-      toolCalls: [
-        { name: "mandate.verify_jti", status: "ok", tag: "Policy" },
-        { name: "merchants.catalog", status: "ok", tag: "Index" },
-      ],
-      sources: [
-        { title: "Deterministic Mandate", category: "Auth", host: "trytrust.internal" },
-        { title: "Merchant Catalog", category: "MCP", host: "catalog.trytrust" },
-      ],
       followUps: [
         "Find a flight to Miami under $180",
         "Build a transaction dashboard",
@@ -82,11 +67,8 @@ export function AgentWorkspace() {
   const [sessionId, setSessionId] = useState<string>()
   const [sending, setSending] = useState(false)
   const [loadingSeconds, setLoadingSeconds] = useState(0)
-  const [artifact, setArtifact] = useState<GeneratedArtifact>(() =>
-    fallbackArtifact({ proposal: { title: "Your permissioned commerce, at a glance" } })
-  )
+  const [artifact, setArtifact] = useState<GeneratedArtifact | null>(null)
   const [view, setView] = useState<"chat" | "preview">("chat")
-  const [runNode, setRunNode] = useState("idle")
 
   // Resizable split pane state
   const [splitRatio, setSplitRatio] = useState(DEFAULT_SPLIT)
@@ -149,16 +131,13 @@ export function AgentWorkspace() {
     setSending(true)
     setLoadingSeconds(0)
 
-    const startTime = getNow()
     const timeString = time()
     const userMsgId = crypto.randomUUID()
 
     setMessages((current) => [
-      ...current,
+      ...current.map((message) => message.followUps ? { ...message, followUps: undefined } : message),
       { id: userMsgId, role: "user", text: value, at: timeString },
     ])
-    setRunNode("search")
-
     try {
       const response = await fetch("/api/agent/chat", {
         method: "POST",
@@ -169,31 +148,11 @@ export function AgentWorkspace() {
       if (!response.ok) throw new Error(data.message ?? data.error ?? "Agent unavailable")
 
       const result = data as AgentChatResponse
-      const durationSeconds = formatDuration(startTime)
       const replyTime = time()
 
       setSessionId(result.sessionId)
-      setRunNode(result.awaitingHuman ? "await_human" : result.run?.node ?? "done")
 
       const isFlight = /flight|bog|mia|miami|ticket|travel/i.test(value)
-
-      const toolCalls: Array<{ name: string; status: "ok" | "running"; tag: string }> = [
-        { name: "merchants.lookup_approved", status: "ok", tag: "MCP" },
-        { name: "mandate.evaluate_gate", status: "ok", tag: "Gate" },
-      ]
-      if (result.artifact) {
-        toolCalls.push({ name: "artifact.compile_document", status: "ok", tag: "HTML/CSS" })
-      }
-
-      const sources = isFlight
-        ? [
-            { title: "VuelaYa Direct Flights", category: "Provider", host: "vuelaya.com" },
-            { title: "Mandate Policy Claim ($250/txn)", category: "Gate", host: "trytrust.jti" },
-          ]
-        : [
-            { title: "Mandate Audit Trail (18 txns)", category: "Ledger", host: "audit.trytrust" },
-            { title: "Spending Analytics Feed", category: "Live Feed", host: "analytics.trytrust" },
-          ]
 
       const followUps = isFlight
         ? [
@@ -207,26 +166,6 @@ export function AgentWorkspace() {
             "Update mandate limit boundaries",
           ]
 
-      const thinkingSteps = [
-        {
-          title: "Search & Provider Query",
-          description: isFlight
-            ? "Queried VuelaYa direct API; matched BOG → MIA flight for $142 USD"
-            : "Fetched mandate-scoped transaction records and volume breakdown",
-          tag: "Search",
-        },
-        {
-          title: "Reasoning & Policy Check",
-          description: "Evaluated per-purchase limit ($250.00 max) and category restrictions. Status: PASS.",
-          tag: "Policy",
-        },
-        {
-          title: "Artifact Compilation",
-          description: "Compiled reactive presentation with Inter typography and 15s data bindings.",
-          tag: "Render",
-        },
-      ]
-
       setMessages((current) => [
         ...current,
         ...result.replies.map((reply, idx) => ({
@@ -234,12 +173,9 @@ export function AgentWorkspace() {
           role: "agent" as const,
           text: reply,
           at: replyTime,
-          elapsed: durationSeconds,
-          toolCalls: idx === 0 ? toolCalls : undefined,
-          sources: idx === 0 ? sources : undefined,
           followUps: idx === result.replies.length - 1 ? followUps : undefined,
           proposal: idx === 0 ? result.run?.proposal : undefined,
-          thinkingSteps: idx === 0 ? thinkingSteps : undefined,
+          artifact: idx === 0 ? result.artifact ?? undefined : undefined,
         })),
       ])
 
@@ -255,6 +191,7 @@ export function AgentWorkspace() {
   }
 
   async function save() {
+    if (!artifact) return toast.error("Generate a live view before saving it")
     const response = await fetch("/api/sites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -273,30 +210,22 @@ export function AgentWorkspace() {
       style={{ "--chat-width": `${splitRatio}%` } as React.CSSProperties}
       className={cn(
         "relative flex h-[calc(100svh-3.5rem)] min-h-0 flex-col md:h-svh font-sans bg-background md:flex-row overflow-hidden",
-        isDragging && "select-none cursor-col-resize"
+        artifact && isDragging && "select-none cursor-col-resize"
       )}
     >
       {/* Chat Section - Starts directly at the top with NO top header */}
       <section
         className={cn(
-          "min-h-0 flex-col border-r border-border/80 bg-background/50",
-          view === "preview" ? "hidden md:flex" : "flex",
-          "w-full md:w-[var(--chat-width)] md:flex-none"
+          "min-h-0 flex-col bg-background/50",
+          artifact && view === "preview" ? "hidden md:flex" : "flex",
+          artifact ? "w-full border-r border-border/80 md:w-[var(--chat-width)] md:flex-none" : "w-full md:flex-1"
         )}
       >
-        {/* Task Pipeline (Directly at top of Chat pane) */}
-        <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-4 sm:px-5 py-2.5 shrink-0">
-          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground">
-            <span className="flex size-1.5 rounded-full bg-primary" />
-            <span className="font-semibold text-primary">Run Pipeline</span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {/* Mobile View Switcher (Chat / Preview) in pipeline bar */}
-            <Tabs
+        {/* Mobile view switcher appears only after an artifact is generated. */}
+        {artifact && <div className="shrink-0 border-b border-border/60 bg-muted/30 px-4 py-2.5 md:hidden">
+          <Tabs
               value={view}
               onValueChange={(v) => setView(v as "chat" | "preview")}
-              className="md:hidden"
             >
               <TabsList className="bg-background/80 p-0.5 h-7">
                 <TabsTrigger
@@ -313,11 +242,8 @@ export function AgentWorkspace() {
                   Preview
                 </TabsTrigger>
               </TabsList>
-            </Tabs>
-
-            <Pipeline active={runNode} />
-          </div>
-        </div>
+          </Tabs>
+        </div>}
 
         {/* Messages Scroll Area */}
         <ScrollArea className="min-h-0 flex-1">
@@ -327,7 +253,10 @@ export function AgentWorkspace() {
                 key={message.id}
                 message={message}
                 onPromptClick={(prompt) => send(prompt)}
-                onViewPreview={() => setView("preview")}
+                onViewPreview={(selectedArtifact) => {
+                  setArtifact(selectedArtifact)
+                  setView("preview")
+                }}
               />
             ))}
 
@@ -415,7 +344,7 @@ export function AgentWorkspace() {
       </section>
 
       {/* Resizable Draggable Split Divider (Desktop md+) */}
-      <div
+      {artifact && <div
         role="separator"
         aria-orientation="vertical"
         aria-valuenow={Math.round(splitRatio)}
@@ -465,10 +394,10 @@ export function AgentWorkspace() {
             />
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* HTML Renderer / Preview Section */}
-      <section
+      {artifact && <section
         className={cn(
           "min-h-0 flex-col bg-[#f8fafc]",
           view === "chat" ? "hidden md:flex" : "flex",
@@ -511,9 +440,9 @@ export function AgentWorkspace() {
 
         {/* Live HTML Artifact Frame */}
         <div className={cn("flex-1 min-h-0 flex flex-col relative", isDragging && "pointer-events-none")}>
-          <ArtifactFrame html={artifact.html} className="min-h-0 flex-1" />
+          <ArtifactFrame html={artifact.html} className="min-h-0 flex-1" title={artifact.title} />
         </div>
-      </section>
+      </section>}
     </main>
   )
 }
@@ -554,10 +483,9 @@ function BeautifulMessageCard({
 }: {
   message: Message
   onPromptClick: (prompt: string) => void
-  onViewPreview: () => void
+  onViewPreview: (artifact: GeneratedArtifact) => void
 }) {
   const isAgent = message.role === "agent"
-  const [thinkingOpen, setThinkingOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
   function copyText() {
@@ -590,60 +518,6 @@ function BeautifulMessageCard({
   // Agent Message (clean, left-aligned, without bot icon)
   return (
     <div className="flex flex-col gap-2.5 w-full enter">
-      {/* Beautiful UI 02: Thinking Trace Accordion */}
-      {message.thinkingSteps && message.thinkingSteps.length > 0 && (
-        <div className="rounded-2xl border border-primary/20 bg-card/80 backdrop-blur-xs overflow-hidden shadow-xs">
-          <button
-            onClick={() => setThinkingOpen(!thinkingOpen)}
-            className="flex w-full items-center justify-between px-3.5 py-2 text-left transition-colors hover:bg-primary/[0.04]"
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles className="size-3 text-primary animate-pulse" />
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-primary">
-                Thinking
-              </span>
-              {message.elapsed && (
-                <span className="rounded-full bg-primary/10 px-1.5 py-0.2 font-mono text-[9px] text-primary">
-                  {message.elapsed}
-                </span>
-              )}
-              <div className="hidden sm:flex items-center gap-1 ml-2">
-                {["Steps", "Reasoning", "Search", "Gate"].map((tag) => (
-                  <span key={tag} className="font-mono text-[8px] uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 font-mono text-[9.5px] text-muted-foreground">
-              <span>{thinkingOpen ? "Hide" : "Show"} steps</span>
-              {thinkingOpen ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-            </div>
-          </button>
-
-          {thinkingOpen && (
-            <div className="border-t border-border/60 bg-muted/20 p-3 space-y-2 text-xs">
-              {message.thinkingSteps.map((step, idx) => (
-                <div key={idx} className="flex items-start gap-2.5 rounded-lg bg-card/70 p-2 border border-border/50">
-                  <span className="grid size-4 shrink-0 place-items-center rounded-full bg-primary/10 text-[9px] font-mono font-bold text-primary mt-0.5">
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground text-[11px]">{step.title}</span>
-                      <span className="font-mono text-[8.5px] text-primary uppercase bg-primary/10 px-1 rounded">
-                        {step.tag}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{step.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Main Message Bubble */}
       <div className="rounded-2xl border border-border/80 bg-card p-4 text-sm leading-relaxed text-foreground shadow-sm">
         <p className="whitespace-pre-wrap">{message.text}</p>
@@ -685,13 +559,13 @@ function BeautifulMessageCard({
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
+              {message.artifact && <Button
                 size="sm"
-                onClick={onViewPreview}
+                onClick={() => onViewPreview(message.artifact!)}
                 className="bg-primary text-primary-foreground text-xs font-medium gap-1.5 shadow-sm hover:bg-primary/90"
               >
                 Inspect Live View
-              </Button>
+              </Button>}
               <Button
                 size="sm"
                 variant="outline"
@@ -701,26 +575,6 @@ function BeautifulMessageCard({
                 <Check className="size-3 text-primary" />
                 Sign with Passkey
               </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Beautiful UI 03 & 10: Context & Sources Chips */}
-        {message.sources && message.sources.length > 0 && (
-          <div className="mt-3 border-t border-border/50 pt-2.5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                Sources:
-              </span>
-              {message.sources.map((source, idx) => (
-                <span
-                  key={idx}
-                  className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 font-mono text-[9px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <span className="size-1 rounded-full bg-primary" />
-                  <span>{source.title}</span>
-                </span>
-              ))}
             </div>
           </div>
         )}
@@ -763,62 +617,8 @@ function BeautifulMessageCard({
   )
 }
 
-/**
- * Beautiful UI 06: Task Pipeline Tracer
- */
-function Pipeline({ active }: { active: string }) {
-  const states = [
-    { key: "search", label: "Search" },
-    { key: "propose", label: "Propose" },
-    { key: "gate", label: "Gate" },
-    { key: "done", label: "Artifact" },
-  ]
-  const index = Math.max(
-    states.findIndex((s) => s.key === active),
-    active === "idle" ? -1 : 3
-  )
-
-  return (
-    <div className="ml-auto flex items-center gap-1">
-      {states.map((state, i) => {
-        const isCurrent = state.key === active
-        const isCompleted = i <= index
-
-        return (
-          <div key={state.key} className="flex items-center gap-1">
-            <span
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] transition-colors ${
-                isCurrent
-                  ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                  : isCompleted
-                  ? "text-primary bg-primary/10 font-medium"
-                  : "text-muted-foreground/50 bg-transparent"
-              }`}
-            >
-              {isCompleted ? (
-                <Check className="size-2.5 stroke-[2.5]" />
-              ) : state.key === "gate" ? (
-                <ShieldCheck className="size-2.5" />
-              ) : (
-                <span className="size-1 rounded-full bg-current" />
-              )}
-              <span>{state.label}</span>
-            </span>
-            {i < states.length - 1 && <span className="text-border/60 text-[9px]">/</span>}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 function getNow() {
   return typeof performance !== "undefined" ? performance.now() : Date.now()
-}
-
-function formatDuration(startTime: number) {
-  const elapsed = (getNow() - startTime) / 1000
-  return `${elapsed.toFixed(1)}s`
 }
 
 function time() {
