@@ -3,9 +3,10 @@ import { generatedArtifactSchema, type GeneratedArtifact } from "@/lib/types"
 import { sanitizeArtifactHtml } from "./sanitize"
 import { fallbackArtifact } from "./fallback"
 
-const SYSTEM = `You are TryTrust's presentation designer. Turn an agent result into a polished, responsive, self-contained HTML/CSS view.
+const SYSTEM = `You are TryTrust's presentation designer. Turn an agent result into a polished, responsive, self-contained HTML/CSS view tailored specifically to the user's request.
 Return JSON only with title, description, html, and bindings.
 Never emit JavaScript, forms, links, images, iframes, remote assets, instructions, payment controls, or claims not present in context.
+Reflect the requested subject, hierarchy, format, and relevant facts. Do not default to a transaction dashboard, and only include data bindings that serve the request.
 HTML may bind trusted live data with data-tt-bind attributes. Available paths: summary.capturedVolume, summary.capturedCount, summary.approvalRate, summary.averageTransaction, timeseries, byMerchant, transactions, currentOffer.
 For charts use a container with data-tt-bind="timeseries" or "byMerchant" and data-tt-chart="bars". For transaction tables use a table with data-tt-bind="transactions" and a tbody.
 Bindings sources are restricted to analytics.summary, analytics.timeseries, analytics.byMerchant, analytics.transactions, agent.currentOffer. refreshSeconds must equal 15.
@@ -35,6 +36,8 @@ export async function generateArtifact(context: Record<string, unknown>): Promis
 }
 
 export function shouldGenerateArtifact(text: string, run: Record<string, unknown> | null) {
-  const signal = /dashboard|site|page|visual|show|overview|report|flight|offer|purchase|transaction/i.test(text)
-  return signal || Boolean(run?.proposal) || Boolean(run?.result)
+  void run
+  const visual = /\b(dashboard|site|web\s?page|landing\s?page|live\s?view|visual(?:ization)?|chart|graph|report|brief|panel|sitio|p[aá]gina|vista|visualizaci[oó]n|gr[aá]fic[ao]|reporte|informe|tabla)\b/i
+  const request = /\b(create|build|generate|render|design|show|make|prepare|visualize|convert|turn|crea|crear|construye|genera|generar|renderiza|diseña|diseñar|muestra|mostrar|visualiza|visualizar|convierte|convertir|prepara|preparar)\b/i
+  return visual.test(text) && request.test(text)
 }

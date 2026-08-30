@@ -44,6 +44,28 @@ export async function getActiveMandate(userId: string) {
   return mandates.find((mandate) => mandate.status.toLowerCase() === "active") ?? null
 }
 
+/**
+ * Chat is scoped to the agent selected by DEFAULT_AGENT_ID, so its turns must
+ * use the mandate registered in the kernel's agent lane. Hanko user ids belong
+ * to the web application and are not kernel owner ids; looking a mandate up by
+ * the Hanko id incorrectly sent first-time users into mandate onboarding.
+ *
+ * The local demo adapter has no agent lane, so it keeps using its in-memory
+ * active mandate.
+ */
+export async function getConversationMandate(userId: string) {
+  if (!kernelUrl()) return getActiveMandate(userId)
+  const mandate = await getAgentMandate()
+  return mandate.status.toLowerCase() === "active" ? mandate : null
+}
+
+/** Read the same audit lane used by the configured conversation agent. */
+export async function getConversationAudit(userId: string): Promise<AuditEvent[]> {
+  if (kernelUrl()) return getAgentAudit(1_000)
+  const mandates = await getMandates(userId)
+  return (await Promise.all(mandates.map((mandate) => getAuditEvents(mandate)))).flat()
+}
+
 export async function askAgent(input: { text: string; sessionId?: string; agentId: string; mandateJti: string; person: string }) {
   if (!kernelUrl()) {
     if (process.env.NODE_ENV === "production") throw new Error("KERNEL_NOT_CONFIGURED")

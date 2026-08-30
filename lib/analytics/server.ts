@@ -1,11 +1,15 @@
 import "server-only"
-import { getAuditEvents, getMandates } from "@/lib/backend/client"
+import { getAuditEvents, getConversationAudit, getMandates } from "@/lib/backend/client"
 import { aggregateAnalytics } from "./aggregate"
 
 export async function analyticsForUser(userId: string, range = "30d", currency?: string) {
   const mandates = await getMandates(userId)
   const events = (await Promise.all(mandates.map((mandate) => getAuditEvents(mandate).catch(() => [])))).flat()
   return aggregateAnalytics(events, range, currency)
+}
+
+export async function analyticsForAgent(userId: string, range = "30d", currency?: string) {
+  return aggregateAnalytics(await getConversationAudit(userId), range, currency)
 }
 
 export function bindingPayload(dataset: Awaited<ReturnType<typeof analyticsForUser>>, currentOffer?: Record<string, unknown>) {
@@ -18,4 +22,3 @@ export function bindingPayload(dataset: Awaited<ReturnType<typeof analyticsForUs
     updatedAt: dataset.updatedAt,
   }
 }
-
