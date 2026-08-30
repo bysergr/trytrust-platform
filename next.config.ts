@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  distDir: process.env.CODEX_TEST_DIST_DIR,
 };
 
 export default nextConfig;

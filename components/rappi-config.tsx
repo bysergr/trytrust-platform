@@ -1,8 +1,17 @@
-"use client";
+"use client"
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react"
+import { LoaderCircle, Store, WalletCards } from "lucide-react"
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   BRIDGE_URL,
   connectManualToken,
@@ -12,254 +21,274 @@ import {
   startRappiLogin,
   type PaymentMethodView,
   type SessionStatus,
-} from "@/lib/bridge";
+} from "@/lib/bridge"
+import { cn } from "@/lib/utils"
 
 const STATE_LABEL: Record<SessionStatus["state"], string> = {
   idle: "Rappi no conectado",
-  waiting_login: "Esperando tu OTP…",
+  waiting_login: "Esperando tu acceso…",
   captured: "Rappi conectado",
   error: "Error de conexión",
-};
+}
 
 const STATE_DOT: Record<SessionStatus["state"], string> = {
-  idle: "bg-zinc-400",
-  waiting_login: "bg-amber-500 animate-pulse",
+  idle: "bg-muted-foreground/55",
+  waiting_login: "animate-pulse bg-amber-500",
   captured: "bg-emerald-500",
-  error: "bg-red-500",
-};
+  error: "bg-destructive",
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "No se pudo completar la acción."
+}
 
 export function useRappiStatus(pollWhile: boolean) {
-  const [status, setStatus] = useState<SessionStatus | null>(null);
-  const [reachable, setReachable] = useState(true);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [status, setStatus] = useState<SessionStatus | null>(null)
+  const [reachable, setReachable] = useState(true)
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await fetchSessionStatus());
-      setReachable(true);
+      setStatus(await fetchSessionStatus())
+      setReachable(true)
     } catch {
-      setReachable(false);
+      setReachable(false)
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
-    void refresh();
-    if (pollWhile) {
-      timer.current = setInterval(() => void refresh(), 2000);
-      return () => {
-        if (timer.current) clearInterval(timer.current);
-      };
-    }
-  }, [pollWhile, refresh]);
+    const initialRefresh = window.setTimeout(() => void refresh(), 0)
+    if (!pollWhile) return () => window.clearTimeout(initialRefresh)
 
-  return { status, reachable, refresh };
+    const timer = window.setInterval(() => void refresh(), 2000)
+    return () => {
+      window.clearTimeout(initialRefresh)
+      window.clearInterval(timer)
+    }
+  }, [pollWhile, refresh])
+
+  return { status, reachable, refresh }
 }
 
-export function RappiConfigButton({ onClick, status }: { onClick: () => void; status: SessionStatus | null }) {
-  const state = status?.state ?? "idle";
+export function RappiConfigButton({
+  onClick,
+  status,
+}: {
+  onClick: () => void
+  status: SessionStatus | null
+}) {
+  const state = status?.state ?? "idle"
+
   return (
-    <Button variant="outline" size="sm" onClick={onClick} className="gap-2">
-      <span className={`size-2 rounded-full ${STATE_DOT[state]}`} aria-hidden />
-      {state === "captured" ? "Rappi conectado" : "Config Rappi"}
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+      aria-label={state === "captured" ? "Configurar Rappi, conectado" : "Configurar Rappi"}
+      className="w-full justify-start gap-2.5 px-2.5 text-muted-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+    >
+      <span className={cn("size-2 rounded-full", STATE_DOT[state])} aria-hidden />
+      <span className="group-data-[collapsible=icon]:hidden">
+        {state === "captured" ? "Rappi conectado" : "Configurar Rappi"}
+      </span>
     </Button>
-  );
+  )
 }
 
 export function RappiConfigPanel({
+  open,
   status,
   reachable,
-  onClose,
+  onOpenChange,
   onRefresh,
 }: {
-  status: SessionStatus | null;
-  reachable: boolean;
-  onClose: () => void;
-  onRefresh: () => void;
+  open: boolean
+  status: SessionStatus | null
+  reachable: boolean
+  onOpenChange: (open: boolean) => void
+  onRefresh: () => void | Promise<void>
 }) {
-  const [busy, setBusy] = useState(false);
-  const [manualToken, setManualToken] = useState("");
-  const [manualError, setManualError] = useState<string | null>(null);
-  const [methods, setMethods] = useState<PaymentMethodView[] | null>(null);
+  const [busy, setBusy] = useState(false)
+  const [manualToken, setManualToken] = useState("")
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [methods, setMethods] = useState<PaymentMethodView[] | null>(null)
 
   useEffect(() => {
-    if (status?.state !== "captured") return;
+    if (status?.state !== "captured") return
+
+    let active = true
     fetchPaymentMethods()
-      .then(setMethods)
-      .catch(() => setMethods(null));
-  }, [status?.state]);
+      .then((nextMethods) => {
+        if (active) setMethods(nextMethods)
+      })
+      .catch((error) => {
+        if (active) setActionError(errorMessage(error))
+      })
 
-  const startLogin = useCallback(async () => {
-    setBusy(true);
-    try {
-      await startRappiLogin();
-      onRefresh();
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setBusy(false);
+    return () => {
+      active = false
     }
-  }, [onRefresh]);
+  }, [status?.state])
 
-  const connectManual = useCallback(async () => {
-    setBusy(true);
-    setManualError(null);
-    try {
-      await connectManualToken(manualToken.trim());
-      setManualToken("");
-      onRefresh();
-    } catch (error) {
-      setManualError((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }, [manualToken, onRefresh]);
+  const runAction = useCallback(
+    async (action: () => Promise<unknown>, afterSuccess?: () => void) => {
+      setBusy(true)
+      setActionError(null)
+      try {
+        await action()
+        afterSuccess?.()
+        await onRefresh()
+      } catch (error) {
+        setActionError(errorMessage(error))
+      } finally {
+        setBusy(false)
+      }
+    },
+    [onRefresh]
+  )
 
-  const disconnect = useCallback(async () => {
-    setBusy(true);
-    try {
-      await disconnectRappi();
-      onRefresh();
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setBusy(false);
-    }
-  }, [onRefresh]);
-
-  const state = status?.state ?? "idle";
+  const state = status?.state ?? "idle"
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
-      <aside
-        className="flex h-full w-full max-w-sm flex-col gap-4 overflow-y-auto border-l border-zinc-200 bg-white p-5"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-zinc-900">Config Rappi</h2>
-          <Button variant="ghost" size="icon-sm" aria-label="Cerrar" onClick={onClose}>
-            ✕
-          </Button>
-        </header>
-
-        {!reachable && (
-          <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            El bridge de Rappi no responde en <code>{BRIDGE_URL}</code>. Levántalo con{" "}
-            <code>uvicorn --factory src.rappi_bridge.app:create_app --port 8010</code>.
-          </p>
-        )}
-
-        <section className="rounded-xl border border-zinc-200 p-3 text-sm">
-          <div className="flex items-center gap-2 font-medium text-zinc-900">
-            <span className={`size-2 rounded-full ${STATE_DOT[state]}`} aria-hidden />
-            {STATE_LABEL[state]}
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-[min(100%,26rem)] overflow-y-auto p-0 sm:max-w-md">
+        <SheetHeader className="border-b border-border/70 pb-5 pr-14">
+          <div className="mb-2 grid size-10 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <Store className="size-5" />
           </div>
-          {status?.account_label && (
-            <p className="mt-2 text-zinc-700">
-              Cuenta: <span className="font-medium">{status.account_label}</span>
-            </p>
+          <SheetTitle>Configurar Rappi</SheetTitle>
+          <SheetDescription>
+            Conecta una sesión local para que el agente pueda consultar y preparar compras autorizadas.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-5 p-6">
+          {!reachable && (
+            <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+              <p className="font-medium">El bridge local no responde.</p>
+              <p className="mt-1 text-xs leading-relaxed text-destructive/80">
+                Verifica que esté activo en <code className="font-mono">{BRIDGE_URL}</code>.
+              </p>
+            </div>
           )}
-          {status?.address_label && (
-            <p className="text-zinc-700">
-              Dirección activa: <span className="font-medium">{status.address_label}</span>
-            </p>
-          )}
-          {status?.error && <p className="mt-2 text-red-600">{status.error}</p>}
-        </section>
 
-        {state !== "captured" && (
-          <section className="flex flex-col gap-3">
-            <Button onClick={() => void startLogin()} disabled={busy || !reachable || state === "waiting_login"}>
-              {state === "waiting_login" ? "Esperando tu login…" : "Iniciar login OTP"}
-            </Button>
-            <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
-              <li>Se abre una ventana de Chrome con rappi.com.co/login.</li>
-              <li>Ingresa tu teléfono y pide un código OTP NUEVO de WhatsApp.</li>
-              <li>
-                Al entrar, capturamos el token de sesión y la ventana se cierra sola. El
-                token nunca sale de esta máquina.
-              </li>
-            </ol>
-
-            <details className="rounded-xl border border-zinc-200 p-3">
-              <summary className="cursor-pointer text-xs font-medium text-zinc-600">
-                Plan B: pegar token manual (si el OTP da error «looks_bad»)
-              </summary>
-              <ol className="mt-2 list-decimal space-y-1 pl-5 text-[11px] text-zinc-500">
-                <li>
-                  Abre{" "}
-                  <a
-                    href="https://www.rappi.com.co"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                  >
-                    rappi.com.co
-                  </a>{" "}
-                  en tu Chrome de siempre y logged in.
-                </li>
-                <li>DevTools (F12) → Network → filtra por «grability».</li>
-                <li>
-                  Cualquier petición: copia el header <code>Authorization</code> completo
-                  (empieza con <code>ft.</code>) y pégalo aquí.
-                </li>
-              </ol>
-              <input
-                value={manualToken}
-                onChange={(event) => setManualToken(event.target.value)}
-                placeholder="ft.gAAAA…"
-                className="mt-2 h-9 w-full rounded-lg border border-zinc-200 px-3 font-mono text-xs outline-none focus:border-zinc-400"
-              />
-              {manualError && <p className="mt-1 text-xs text-red-600">{manualError}</p>}
-              <Button
-                size="sm"
-                variant="secondary"
-                className="mt-2 w-full"
-                disabled={busy || !manualToken.trim() || !reachable}
-                onClick={() => void connectManual()}
-              >
-                Conectar con token
-              </Button>
-            </details>
-          </section>
-        )}
-
-        {state === "captured" && (
-          <section className="flex flex-col gap-3">
-            {methods && methods.length > 0 && (
-              <div className="rounded-xl border border-zinc-200 p-3 text-xs">
-                <p className="mb-2 font-medium text-zinc-700">Métodos de pago</p>
-                <ul className="space-y-1">
-                  {methods.map((method) => (
-                    <li key={method.id} className="flex items-center justify-between text-zinc-600">
-                      <span>
-                        {method.main_description ?? method.id}
-                        {method.cash && (
-                          <span className="ml-2 text-amber-600">(efectivo)</span>
-                        )}
-                      </span>
-                      {method.selected && (
-                        <span className="font-medium text-emerald-600">SELECTED</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <section className="rounded-2xl border border-border/80 bg-muted/25 p-4 text-sm">
+            <div className="flex items-center gap-2 font-medium">
+              <span className={cn("size-2 rounded-full", STATE_DOT[state])} aria-hidden />
+              {STATE_LABEL[state]}
+            </div>
+            {status?.account_label && (
+              <p className="mt-3 text-muted-foreground">
+                Cuenta: <span className="font-medium text-foreground">{status.account_label}</span>
+              </p>
             )}
-            <p className="text-xs text-zinc-500">
-              Listo: las compras del agente usarán esta sesión bajo mandato. Para cambiar de
-              cuenta, desconecta y vuelve a hacer login.
-            </p>
-            <Button variant="destructive" onClick={() => void disconnect()} disabled={busy}>
-              Desconectar Rappi
-            </Button>
+            {status?.address_label && (
+              <p className="mt-1 text-muted-foreground">
+                Dirección: <span className="font-medium text-foreground">{status.address_label}</span>
+              </p>
+            )}
+            {status?.error && <p className="mt-3 text-destructive">{status.error}</p>}
           </section>
-        )}
 
-        <footer className="mt-auto border-t border-zinc-100 pt-3 text-[11px] leading-relaxed text-zinc-400">
-          Bridge: {BRIDGE_URL} · DRY_RUN por defecto · tope y dirección se verifican por
-          código en cada compra (decisión 0030).
-        </footer>
-      </aside>
-    </div>
-  );
+          {actionError && (
+            <p role="alert" className="rounded-xl bg-destructive/8 px-3 py-2 text-xs text-destructive">
+              {actionError}
+            </p>
+          )}
+
+          {state !== "captured" ? (
+            <section className="space-y-4">
+              <Button
+                className="w-full"
+                disabled={busy || !reachable || state === "waiting_login"}
+                onClick={() => void runAction(startRappiLogin)}
+              >
+                {busy && <LoaderCircle className="animate-spin" />}
+                {state === "waiting_login" ? "Esperando tu acceso…" : "Iniciar acceso con OTP"}
+              </Button>
+              <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
+                <li>El bridge abre Rappi en una ventana local de Chrome.</li>
+                <li>Ingresa tu teléfono y solicita un código OTP nuevo.</li>
+                <li>Cuando accedas, la sesión se captura localmente y la ventana se cierra.</li>
+              </ol>
+
+              <details className="rounded-2xl border border-border/80 p-4">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                  Conectar manualmente
+                </summary>
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  Si el OTP falla, pega el valor completo del encabezado Authorization de una petición autenticada de Rappi.
+                </p>
+                <Input
+                  type="password"
+                  value={manualToken}
+                  onChange={(event) => setManualToken(event.target.value)}
+                  placeholder="ft.gAAAA…"
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-label="Token de sesión de Rappi"
+                  className="mt-3 rounded-xl bg-muted/40 font-mono text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="mt-2 w-full"
+                  disabled={busy || !manualToken.trim() || !reachable}
+                  onClick={() =>
+                    void runAction(
+                      () => connectManualToken(manualToken.trim()),
+                      () => setManualToken("")
+                    )
+                  }
+                >
+                  Conectar con token
+                </Button>
+              </details>
+            </section>
+          ) : (
+            <section className="space-y-4">
+              {methods && methods.length > 0 && (
+                <div className="rounded-2xl border border-border/80 p-4 text-xs">
+                  <p className="mb-3 flex items-center gap-2 font-medium">
+                    <WalletCards className="size-4 text-primary" />
+                    Métodos de pago
+                  </p>
+                  <ul className="space-y-2">
+                    {methods.map((method) => (
+                      <li key={method.id} className="flex items-center justify-between gap-3 text-muted-foreground">
+                        <span className="truncate">
+                          {method.main_description ?? method.id}
+                          {method.cash ? " · efectivo" : ""}
+                        </span>
+                        {method.selected && (
+                          <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 font-mono text-[9px] uppercase text-emerald-700">
+                            Activo
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                La sesión permanece en esta máquina. Para cambiar de cuenta, desconecta y vuelve a iniciar el acceso.
+              </p>
+              <Button
+                variant="destructive"
+                className="w-full"
+                disabled={busy}
+                onClick={() => void runAction(disconnectRappi)}
+              >
+                {busy && <LoaderCircle className="animate-spin" />}
+                Desconectar Rappi
+              </Button>
+            </section>
+          )}
+        </div>
+
+        <p className="mt-auto border-t border-border/70 px-6 py-4 font-mono text-[10px] leading-relaxed text-muted-foreground">
+          Bridge local · modo DRY_RUN por defecto · límites y dirección se validan en cada compra.
+        </p>
+      </SheetContent>
+    </Sheet>
+  )
 }

@@ -2,7 +2,9 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useState } from "react"
 import { BarChart3, Bot, ChevronsUpDown, FileText, LogOut, Plus, ShieldCheck } from "lucide-react"
+import { RappiConfigButton, RappiConfigPanel, useRappiStatus } from "@/components/rappi-config"
 import type { HankoUser, SiteRecord } from "@/lib/types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -42,6 +44,12 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const [rappiOpen, setRappiOpen] = useState(false)
+  const {
+    status: rappiStatus,
+    reachable: rappiReachable,
+    refresh: refreshRappi,
+  } = useRappiStatus(rappiOpen)
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "17rem" } as React.CSSProperties}>
@@ -123,10 +131,19 @@ export function AppShell({
         </SidebarContent>
 
         <SidebarFooter className="p-2.5 group-data-[collapsible=icon]:p-2">
+          <RappiConfigButton status={rappiStatus} onClick={() => setRappiOpen(true)} />
           <UserFooterMenu user={user} />
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
+
+      <RappiConfigPanel
+        open={rappiOpen}
+        status={rappiStatus}
+        reachable={rappiReachable}
+        onOpenChange={setRappiOpen}
+        onRefresh={refreshRappi}
+      />
 
       <SidebarInset className="min-w-0 bg-transparent">
         {/* Mobile Header */}

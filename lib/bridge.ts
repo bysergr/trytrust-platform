@@ -5,8 +5,6 @@
 export const BRIDGE_URL =
   process.env.NEXT_PUBLIC_RAPPI_BRIDGE_URL ?? "http://localhost:8010";
 
-export const KERNEL_URL = process.env.NEXT_PUBLIC_KERNEL_URL ?? "";
-
 export type SessionStatus = {
   state: "idle" | "waiting_login" | "captured" | "error";
   has_token: boolean;
@@ -61,55 +59,4 @@ export function fetchPaymentMethods(): Promise<PaymentMethodView[]> {
 
 export function disconnectRappi(): Promise<SessionStatus> {
   return bridgeFetch<SessionStatus>("/v1/rappi/session", { method: "DELETE" });
-}
-
-export type ChatTurn = { role: "user" | "assistant" | "system"; text: string };
-
-export type DispatchResult = {
-  reply: string;
-  agent_name: string | null;
-  mandate_jti: string | null;
-};
-
-export async function askKernel(text: string): Promise<DispatchResult> {
-  // Preferred: the kernel routes to the agent whose mandate matches.
-  try {
-    const response = await fetch(`${KERNEL_URL}/agent/dispatch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (response.ok) {
-      const data = (await response.json()) as {
-        replies?: string[];
-        dispatch?: { agent_name?: string; mandate_jti?: string };
-      };
-      const reply = data.replies?.join("\n") ?? "";
-      return {
-        reply,
-        agent_name: data.dispatch?.agent_name ?? null,
-        mandate_jti: data.dispatch?.mandate_jti ?? null,
-      };
-    }
-    if (response.status !== 404) {
-      throw new Error(`kernel /agent/dispatch → ${response.status}`);
-    }
-  } catch (error) {
-    if ((error as Error).message.includes("/agent/dispatch")) throw error;
-    // fall through to the pinned-agent path below
-  }
-  const response = await fetch(`${KERNEL_URL}/agent/ask`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      text,
-      agent_id: process.env.NEXT_PUBLIC_AGENT_ID ?? "aval",
-      mandate_jti: process.env.NEXT_PUBLIC_MANDATE_JTI ?? "",
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`kernel /agent/ask → ${response.status}`);
-  }
-  const data = (await response.json()) as { replies?: string[] };
-  return { reply: data.replies?.join("\n") ?? "", agent_name: null, mandate_jti: null };
 }

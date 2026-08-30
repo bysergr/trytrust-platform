@@ -20,6 +20,8 @@
 # production
 /build
 
+.next-codex/
+
 # misc
 .DS_Store
 *.pem
