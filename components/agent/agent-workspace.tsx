@@ -178,14 +178,14 @@ export function AgentWorkspace() {
       ref={containerRef}
       style={{ "--chat-width": `${splitRatio}%` } as React.CSSProperties}
       className={cn(
-        "relative flex h-[calc(100svh-3.5rem)] min-h-0 flex-col md:h-svh font-sans bg-background md:flex-row overflow-hidden",
+        "relative flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden bg-background font-sans md:h-dvh md:flex-row",
         artifact && isDragging && "select-none cursor-col-resize"
       )}
     >
       {/* Chat Section - Starts directly at the top with NO top header */}
       <section
         className={cn(
-          "min-h-0 flex-col bg-background/50",
+          "min-h-0 flex-1 flex-col bg-background/50",
           artifact && view === "preview" ? "hidden md:flex" : "flex",
           artifact ? "w-full border-r border-border/80 md:w-[var(--chat-width)] md:flex-none" : "w-full md:flex-1"
         )}
@@ -236,7 +236,7 @@ export function AgentWorkspace() {
         </ScrollArea>
 
         {/* Floating Prompt Bar / Composer */}
-        <div className="border-t border-border/70 bg-background/95 backdrop-blur-xl p-3 sm:p-4 shrink-0">
+        <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border/70 bg-background/95 p-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:p-4">
           <div className="mx-auto max-w-2xl">
             {/* AI Composer Box */}
             <div className="group relative rounded-3xl border border-border/80 bg-card/90 p-2.5 shadow-[0_12px_40px_-20px_rgba(29,78,216,0.2)] transition-all duration-300 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10">
@@ -268,10 +268,6 @@ export function AgentWorkspace() {
               </div>
             </div>
 
-            <div className="mt-2 flex items-center justify-center gap-1.5 font-mono text-[9.5px] text-muted-foreground/80">
-              <ShieldCheck className="size-3 text-primary" />
-              <span>Deterministic Gate Active · Unsigned proposals fail closed</span>
-            </div>
           </div>
         </div>
       </section>
