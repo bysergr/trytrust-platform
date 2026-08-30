@@ -18,7 +18,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     </section>
     <section className="flex min-h-svh items-center justify-center p-5 sm:p-10"><div className="surface enter-delay w-full max-w-md rounded-3xl border p-6 shadow-[0_35px_100px_-60px_rgba(20,40,90,.5)] sm:p-9">
       <div className="mb-10 flex items-center lg:hidden"><Logo size="lg" /></div>
-      <p className="font-mono text-[10px] uppercase tracking-[.16em] text-primary">Secure access</p><h2 className="editorial-title mt-3 text-4xl font-medium">Welcome to your agent.</h2><p className="mb-8 mt-4 text-sm leading-6 text-muted-foreground">Continue with Google or use a passkey already registered to this device.</p>
+      <p className="font-mono text-[10px] uppercase tracking-[.16em] text-primary">Passwordless access</p><h2 className="editorial-title mt-3 text-4xl font-medium">Welcome to your agent.</h2><p className="mb-8 mt-4 text-sm leading-6 text-muted-foreground">Create your account once with Google. After that, return with Touch ID—no passwords or passcodes.</p>
       <HankoAuth next={safeNext(next)} />
       <p className="mt-8 text-center text-[10px] leading-5 text-muted-foreground">By continuing, you acknowledge that AI proposals are suggestions. Your signed mandate remains the authority.</p>
     </div></section>
@@ -26,4 +26,3 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 }
 
 function safeNext(value?: string) { return value?.startsWith("/") && !value.startsWith("//") ? value : "/" }
-

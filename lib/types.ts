@@ -79,6 +79,7 @@ export type HankoUser = {
   email: string
   name: string
   avatarUrl?: string | null
+  hasAccountPasskey?: boolean
   isDemo?: boolean
 }
 
@@ -240,4 +241,3 @@ export type SiteVersionRecord = {
 }
 
 export type SiteWithVersion = SiteRecord & { version: SiteVersionRecord | null }
-
