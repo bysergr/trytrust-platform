@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TryTrust Platform
 
-## Getting Started
+TryTrust is a mobile-first Next.js 16 workspace for permissioned commerce agents. It combines a conversational agent, transaction analytics, generated live sites, Hanko authentication, and a server-only BFF over the existing TryTrust kernel.
 
-First, run the development server:
+## Local setup
+
+1. Copy `.env.example` to `.env.local` and fill in the service credentials.
+2. Apply `db/migrations/0001_trytrust_web.sql` to the PostgreSQL database.
+3. Start the TryTrust kernel on port `8001` and the merchant service on port `8003`.
+4. Run `pnpm dev` and open `http://localhost:3000`.
+
+Without Hanko, PostgreSQL, Gemini, or the kernel configured, development mode uses isolated in-memory/demo adapters. Production fails closed for authentication, persistence, and kernel access.
+
+## Architecture
+
+- The browser calls only private Next.js Route Handlers.
+- Hanko validates the account session; Hanko passkeys and mandate-signing WebAuthn credentials are separate.
+- The BFF resolves the active mandate and never trusts a client-provided mandate JTI.
+- The backend owns Gemini agent execution and the commercial MCP at `/mcp`.
+- Presentation-only Gemini output is schema-validated, sanitized, and rendered in a sandboxed iframe.
+- Public sites expose only the binding fields selected at publish time.
+- Analytics never combines monetary totals from different currencies.
+
+## Verification
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The shadcn components use the existing `base-luma` preset and the application tokens in `app/globals.css`.
