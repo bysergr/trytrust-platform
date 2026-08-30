@@ -16,7 +16,12 @@ const DECISION_WORDS = new Set([
 ])
 
 export function isBareDecision(text: string) {
-  const cleaned = text.toLowerCase().replace(/[^\w\s]/g, " ").trim().replace(/\s+/g, " ")
+  // `\p{L}` rather than `\w`, which in JavaScript is ASCII-only: it would strip
+  // the accent out of "sí" and leave "s", so a Spanish approval would sail past
+  // this guard and land on the kernel, which reads it as a decision. Python's
+  // `\w` is Unicode-aware, so the kernel's own classifier never had that hole.
+  const cleaned = text.toLowerCase().replace(/[^\p{L}\p{N}_\s]/gu, " ").trim().replace(/\s+/g, " ")
+  if (!cleaned) return false
   const words = cleaned.split(" ")
   return DECISION_WORDS.has(cleaned) || (words.length <= 3 && DECISION_WORDS.has(words[0]))
 }

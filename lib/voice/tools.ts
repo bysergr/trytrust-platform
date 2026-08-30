@@ -94,9 +94,15 @@ const approvePendingPurchase = tool({
   // `tool_approval_requested` and blocks until the console confirms.
   needsApproval: true,
   parameters: z.object({
+    // Not sent anywhere: the kernel classifies an approval turn by its text,
+    // and "approve — 300 USD for the business fare" reads as guidance, not as
+    // an approval, which would refuse the purchase instead of allowing it.
+    // The parameter earns its place by forcing the model to state the amount
+    // before it can call this, and the console renders it on the approval card
+    // so the operator confirms against a number rather than a tool name.
     amountReadBack: z
       .string()
-      .describe('The amount and item you read out loud, e.g. "300 dollars for the flexible business fare". Recorded so the approval is auditable.'),
+      .describe('The amount and item you read out loud, e.g. "300 dollars for the flexible business fare". Shown to the operator on the confirmation.'),
   }),
   async execute() {
     return sendTurn("approve")

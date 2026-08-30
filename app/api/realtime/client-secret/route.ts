@@ -13,9 +13,25 @@ import { apiError } from "@/lib/http"
  * Anything that must stay secret — hosted MCP `authorization` headers, for
  * example — belongs in the `session` payload below, not in browser code.
  */
+/**
+ * One secret per connection is all a session needs, so a burst is either a
+ * retry loop or someone running up the bill. Per instance and in memory: this
+ * blunts a loop from one browser, it is not a rate limiter, and behind several
+ * instances each keeps its own count.
+ */
+const COOLDOWN_MS = 3_000
+const lastMinted = new Map<string, number>()
+
 export async function POST() {
   try {
-    await requireUser()
+    const user = await requireUser()
+
+    const now = Date.now()
+    const previous = lastMinted.get(user.id)
+    if (previous && now - previous < COOLDOWN_MS) {
+      return Response.json({ error: "Slow down — a voice session was just started." }, { status: 429 })
+    }
+    lastMinted.set(user.id, now)
 
     const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey) return Response.json({ error: "OPENAI_API_KEY is not set on the server" }, { status: 500 })
