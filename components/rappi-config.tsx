@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BRIDGE_URL,
+  connectManualToken,
   disconnectRappi,
   fetchSessionStatus,
   startRappiLogin,
@@ -74,6 +75,8 @@ export function RappiConfigPanel({
   onRefresh: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [manualToken, setManualToken] = useState("");
+  const [manualError, setManualError] = useState<string | null>(null);
 
   const startLogin = useCallback(async () => {
     setBusy(true);
@@ -86,6 +89,20 @@ export function RappiConfigPanel({
       setBusy(false);
     }
   }, [onRefresh]);
+
+  const connectManual = useCallback(async () => {
+    setBusy(true);
+    setManualError(null);
+    try {
+      await connectManualToken(manualToken.trim());
+      setManualToken("");
+      onRefresh();
+    } catch (error) {
+      setManualError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [manualToken, onRefresh]);
 
   const disconnect = useCallback(async () => {
     setBusy(true);
@@ -146,12 +163,53 @@ export function RappiConfigPanel({
             </Button>
             <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-500">
               <li>Se abre una ventana de Chrome con rappi.com.co/login.</li>
-              <li>Ingresa tu teléfono y el código OTP de WhatsApp.</li>
+              <li>Ingresa tu teléfono y pide un código OTP NUEVO de WhatsApp.</li>
               <li>
                 Al entrar, capturamos el token de sesión y la ventana se cierra sola. El
                 token nunca sale de esta máquina.
               </li>
             </ol>
+
+            <details className="rounded-xl border border-zinc-200 p-3">
+              <summary className="cursor-pointer text-xs font-medium text-zinc-600">
+                Plan B: pegar token manual (si el OTP da error «looks_bad»)
+              </summary>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-[11px] text-zinc-500">
+                <li>
+                  Abre{" "}
+                  <a
+                    href="https://www.rappi.com.co"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    rappi.com.co
+                  </a>{" "}
+                  en tu Chrome de siempre y logged in.
+                </li>
+                <li>DevTools (F12) → Network → filtra por «grability».</li>
+                <li>
+                  Cualquier petición: copia el header <code>Authorization</code> completo
+                  (empieza con <code>ft.</code>) y pégalo aquí.
+                </li>
+              </ol>
+              <input
+                value={manualToken}
+                onChange={(event) => setManualToken(event.target.value)}
+                placeholder="ft.gAAAA…"
+                className="mt-2 h-9 w-full rounded-lg border border-zinc-200 px-3 font-mono text-xs outline-none focus:border-zinc-400"
+              />
+              {manualError && <p className="mt-1 text-xs text-red-600">{manualError}</p>}
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2 w-full"
+                disabled={busy || !manualToken.trim() || !reachable}
+                onClick={() => void connectManual()}
+              >
+                Conectar con token
+              </Button>
+            </details>
           </section>
         )}
 

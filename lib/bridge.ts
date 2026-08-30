@@ -37,6 +37,13 @@ export function startRappiLogin(): Promise<SessionStatus> {
   return bridgeFetch<SessionStatus>("/v1/rappi/session/login", { method: "POST" });
 }
 
+export function connectManualToken(token: string): Promise<SessionStatus> {
+  return bridgeFetch<SessionStatus>("/v1/rappi/session/manual", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
 export function disconnectRappi(): Promise<SessionStatus> {
   return bridgeFetch<SessionStatus>("/v1/rappi/session", { method: "DELETE" });
 }
