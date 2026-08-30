@@ -1,32 +1,26 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
-import "./globals.css";
-import { cn } from "@/lib/utils";
+import type { Metadata } from "next"
+import { IBM_Plex_Mono, IBM_Plex_Sans, Inter } from "next/font/google"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { Toaster } from "@/components/ui/sonner"
+import "./globals.css"
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const plexSans = IBM_Plex_Sans({ subsets: ["latin"], variable: "--font-plex-sans", weight: ["400", "500", "600"] })
+const plexMono = IBM_Plex_Mono({ subsets: ["latin"], variable: "--font-plex-mono", weight: ["400", "500"] })
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", weight: ["300", "400", "500", "600", "700"] })
 
 export const metadata: Metadata = {
-  title: "TryTrust — Tower Control",
-  description: "Compras de agentes de IA bajo mandato verificable",
-};
+  title: { default: "TryTrust — Agentic commerce you can verify", template: "%s · TryTrust" },
+  description: "A trust layer for purchases made by AI agents.",
+  icons: { icon: "/icon.svg", shortcut: "/icon.svg", apple: "/icon.svg" },
+}
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", inter.variable)}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className={`${plexSans.variable} ${plexMono.variable} ${inter.variable}`}>
+      <body>
+        <TooltipProvider>{children}</TooltipProvider>
+        <Toaster position="top-right" richColors />
+      </body>
     </html>
-  );
+  )
 }
