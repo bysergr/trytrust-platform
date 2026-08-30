@@ -6,6 +6,7 @@ import type {
   AgentWatch,
   AuditEvent,
   Mandate,
+  PurchaseTrace,
 } from "@/lib/types"
 
 const kernelUrl = () => process.env.KERNEL_API_URL?.replace(/\/$/, "")
@@ -145,6 +146,29 @@ export async function getAgentLimits(): Promise<Record<string, unknown>> {
 
 export async function getWatches(): Promise<AgentWatch[]> {
   return kernelFetch("/agent/watches?status=active")
+}
+
+/**
+ * A purchase's full mandate ancestry — the one-shot child that authorised it
+ * plus every ancestor settlement walked and debited alongside it. Unlike
+ * `kernelFetch`, a 404 here is an ordinary "unknown purchase" outcome, not a
+ * kernel failure, so it is normalized to `NOT_FOUND` for `apiError` to map
+ * to a clean 404 instead of a 500.
+ */
+export async function getPurchaseTrace(purchaseId: string): Promise<PurchaseTrace> {
+  const base = kernelUrl()
+  if (!base) throw new Error("KERNEL_NOT_CONFIGURED")
+  const response = await fetch(`${base}/agent/purchases/${encodeURIComponent(purchaseId)}/trace`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(process.env.KERNEL_SERVICE_TOKEN ? { Authorization: `Bearer ${process.env.KERNEL_SERVICE_TOKEN}` } : {}),
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(25_000),
+  })
+  if (response.status === 404) throw new Error("NOT_FOUND")
+  if (!response.ok) throw new Error(`Kernel /agent/purchases/${purchaseId}/trace failed (${response.status})`)
+  return response.json() as Promise<PurchaseTrace>
 }
 
 /**

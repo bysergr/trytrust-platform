@@ -218,6 +218,58 @@ export type AnalyticsDataset = {
   updatedAt: string
 }
 
+// ── purchase trace ────────────────────────────────────────────────────────
+/**
+ * `/agent/purchases/{id}/trace` walks the mandate ancestry a purchase
+ * settled against: depth 0 is the child mandate that actually authorised the
+ * purchase (the "authorising" mandate), depth 1+ are the ancestors it debits
+ * alongside itself. An ancestor row can be gone by the time this is read —
+ * that comes back as `{ jti, depth, missing: true }` rather than a 404 for
+ * the whole trace, so a caller has to handle both shapes.
+ */
+export type PurchaseTraceMandateLimits = {
+  max_per_txn?: string
+  total_budget?: string
+  max_txn?: { count?: number; period?: string }
+  currency?: string
+  scope?: { categories?: string[]; merchants?: string[] }
+  signed_with?: string
+}
+
+export type PurchaseTraceMandate = {
+  jti: string
+  depth: number
+  role: "authorising" | "ancestor"
+  status: string
+  parent_jti: string | null
+  user_id?: string
+  agent_id?: string
+  limits: PurchaseTraceMandateLimits
+  debited: string
+  spent_total: string
+  reserved_amount: string
+  txn_count: number
+  missing?: false
+} | {
+  jti: string
+  depth: number
+  missing: true
+}
+
+export type PurchaseTrace = {
+  purchase_id: string
+  status: string
+  reason_code: string | null
+  amount: string
+  created_at: string
+  updated_at: string
+  reservation_id: string | null
+  receipt: Record<string, unknown> | null
+  mandates: PurchaseTraceMandate[]
+  intent: Record<string, unknown> | null
+  events: Array<Record<string, unknown>>
+}
+
 export type SiteRecord = {
   id: string
   ownerId: string
