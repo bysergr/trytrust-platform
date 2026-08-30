@@ -23,9 +23,32 @@ export const generatedArtifactSchema = z.object({
   bindings: z.array(dataBindingSchema).max(12).default([]),
 })
 
+/**
+ * The kernel's chat has three shapes of turn — a request starts a run,
+ * approve/reject answers whatever it is parked on, anything else replans.
+ * They are named here rather than inferred from the text so that approving a
+ * purchase can be gated behind a confirmation the caller has to make
+ * deliberately. `turn` defaults to "request", so older callers are unaffected.
+ */
+export const agentTurnSchema = z.enum(["request", "guidance", "approve", "reject"])
+
 export const agentChatRequestSchema = z.object({
-  text: z.string().trim().min(1).max(2_000),
+  text: z.string().trim().min(1).max(2_000).optional(),
   sessionId: z.string().min(1).max(128).optional(),
+  turn: agentTurnSchema.default("request"),
+}).refine((body) => body.turn === "approve" || body.turn === "reject" || Boolean(body.text), {
+  message: "text is required for a request or guidance turn",
+  path: ["text"],
+})
+
+export type AgentTurn = z.infer<typeof agentTurnSchema>
+
+export const watchCreateSchema = z.object({
+  maxPrice: z.number().positive().max(1_000_000),
+  destination: z.string().trim().max(8).nullish(),
+  origin: z.string().trim().max(8).nullish(),
+  date: z.string().trim().max(10).nullish(),
+  category: z.string().trim().max(32).nullish(),
 })
 
 export const siteCreateSchema = z.object({
@@ -92,6 +115,73 @@ export type AuditEvent = {
   type: string
   payload: Record<string, unknown>
   created_at: string
+}
+
+// ── the agent lane's own store, read through /agent/* ────────────────────────
+/**
+ * A row of the kernel's `agent_runs` as `/agent/runs` returns it — the
+ * checkpoint itself, so the proposal and the result sit inside `state`. That is
+ * not the trimmed `AgentRun` that `/agent/ask` builds.
+ */
+export type AgentRunRow = {
+  run_id: string
+  status: string
+  node: string | null
+  escalation_id?: string | null
+  created_at: string
+  state?: {
+    request?: string
+    proposal?: Record<string, unknown> | null
+    result?: Record<string, unknown> | null
+  }
+}
+
+export type AgentMandate = {
+  jti: string
+  status: string
+  spent: string
+  reserved: string
+  txn_count: number
+  claims: {
+    currency?: string
+    limits?: { max_per_txn?: string; total_budget?: string; max_txn?: { count?: number; period?: string } }
+    scope?: { categories?: string[]; merchants?: string[] }
+    validity?: { expires_at?: string }
+  }
+  memory: Record<string, unknown>
+}
+
+export type AgentEscalation = {
+  id: string
+  run_id: string | null
+  mandate_jti: string
+  decision: string | null
+  status: string
+  timeout_at: string | null
+  created_at: string
+}
+
+export type AgentAuditEvent = {
+  seq: number
+  event_id: string
+  type: string
+  actor: string | null
+  created_at: string
+  payload: Record<string, unknown>
+}
+
+export type AgentChainVerification = {
+  chains: { valid: boolean; chains: number; checked: number; root: string | null; broken: unknown[] }
+  checkpoint: { valid: boolean | null; detail?: string }
+}
+
+export type AgentWatch = {
+  id: string
+  query: string
+  threshold: string
+  interval_s: number
+  status: string
+  last_checked_at: string | null
 }
 
 export type Transaction = {
