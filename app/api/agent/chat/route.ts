@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth/server"
-import { askAgent, getActiveMandate } from "@/lib/backend/client"
+import { askAgent, getConversationMandate } from "@/lib/backend/client"
 import { isBareDecision } from "@/lib/backend/turns"
 import { saveSession, ownSession } from "@/lib/db/repository"
 import { generateArtifact, shouldGenerateArtifact } from "@/lib/artifacts/generate"
@@ -18,8 +18,8 @@ export async function POST(request: Request) {
       return Response.json({ error: "DECISION_NEEDS_EXPLICIT_TURN", message: "That reads as a decision on a pending escalation. Send it as an approve or reject turn so the caller confirms it deliberately." }, { status: 409 })
     }
 
-    const mandate = await getActiveMandate(user.id)
-    if (!mandate) return Response.json({ error: "ONBOARDING_REQUIRED", message: "Create and activate a mandate before using the agent." }, { status: 409 })
+    const mandate = await getConversationMandate(user.id)
+    if (!mandate) return Response.json({ error: "AGENT_MANDATE_INACTIVE", message: "The configured agent does not have an active mandate." }, { status: 409 })
     const agentId = process.env.DEFAULT_AGENT_ID ?? "agt_flights"
     const raw = await askAgent({ text, sessionId: body.sessionId, agentId, mandateJti: mandate.jti, person: user.name })
     const sessionId = String(raw.session_id)

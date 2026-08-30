@@ -19,7 +19,6 @@ import { toast } from "sonner"
 import type { AgentChatResponse, GeneratedArtifact } from "@/lib/types"
 import { fallbackArtifact } from "@/lib/artifacts/fallback"
 import { ArtifactFrame } from "@/components/sites/artifact-frame"
-import { MandateOnboarding } from "@/components/onboarding/mandate-onboarding"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -87,28 +86,11 @@ export function AgentWorkspace() {
     fallbackArtifact({ proposal: { title: "Your permissioned commerce, at a glance" } })
   )
   const [view, setView] = useState<"chat" | "preview">("chat")
-  const [ready, setReady] = useState<boolean | null>(null)
   const [runNode, setRunNode] = useState("idle")
 
   // Resizable split pane state
   const [splitRatio, setSplitRatio] = useState(DEFAULT_SPLIT)
   const [isDragging, setIsDragging] = useState(false)
-
-  // Asynchronous onboarding verification
-  useEffect(() => {
-    let isMounted = true
-    void fetch("/api/onboarding/status")
-      .then((response) => response.json())
-      .then((data) => {
-        if (isMounted) setReady(Boolean(data.ready))
-      })
-      .catch(() => {
-        if (isMounted) setReady(false)
-      })
-    return () => {
-      isMounted = false
-    }
-  }, [])
 
   // Auto-scroll chat to latest message
   useEffect(() => {
@@ -184,11 +166,7 @@ export function AgentWorkspace() {
         body: JSON.stringify({ text: value, sessionId }),
       })
       const data = await response.json()
-      if (response.status === 409 && data.error === "ONBOARDING_REQUIRED") {
-        setReady(false)
-        return
-      }
-      if (!response.ok) throw new Error(data.error ?? "Agent unavailable")
+      if (!response.ok) throw new Error(data.message ?? data.error ?? "Agent unavailable")
 
       const result = data as AgentChatResponse
       const durationSeconds = formatDuration(startTime)
@@ -288,8 +266,6 @@ export function AgentWorkspace() {
     router.push(`/sites/${site.id}`)
     router.refresh()
   }
-
-  if (ready === false) return <MandateOnboarding onReady={() => setReady(true)} />
 
   return (
     <main
