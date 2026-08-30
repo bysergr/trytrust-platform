@@ -34,7 +34,10 @@ export const agentTurnSchema = z.enum(["request", "guidance", "approve", "reject
 
 export const agentChatRequestSchema = z.object({
   text: z.string().trim().min(1).max(2_000).optional(),
-  sessionId: z.string().min(1).max(128).optional(),
+  // A new browser/voice conversation has no kernel session yet. JSON encodes
+  // that initial `undefined` state as `null`, so normalize both representations
+  // to an omitted session before the route forwards the first turn.
+  sessionId: z.string().min(1).max(128).nullish().transform((value) => value ?? undefined),
   turn: agentTurnSchema.default("request"),
 }).refine((body) => body.turn === "approve" || body.turn === "reject" || Boolean(body.text), {
   message: "text is required for a request or guidance turn",

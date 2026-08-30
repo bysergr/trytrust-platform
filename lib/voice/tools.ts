@@ -1,7 +1,7 @@
 import { tool } from "@openai/agents-realtime"
 import { z } from "zod"
 
-import { getConversation, recordTurn } from "@/lib/voice/conversation"
+import { getConversation, recordTurn, takeBuyerRequest } from "@/lib/voice/conversation"
 import type {
   AgentAuditEvent,
   AgentChainVerification,
@@ -35,9 +35,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Every turn shape goes through here so the session id is never dropped. */
 async function sendTurn(turn: "request" | "guidance" | "approve" | "reject", text?: string) {
+  const { sessionId } = getConversation()
   const response = await api<AgentChatResponse>("/api/agent/chat", {
     method: "POST",
-    body: JSON.stringify({ turn, text, sessionId: getConversation().sessionId }),
+    // The first turn has no session yet. Omit the field rather than encoding
+    // the absence as JSON null; subsequent turns retain the kernel session.
+    body: JSON.stringify({ turn, text, ...(sessionId ? { sessionId } : {}) }),
   })
 
   recordTurn(response)
@@ -55,17 +58,19 @@ const askAgent = tool({
   name: "ask_agent",
   description:
     "Give the buying agent a new job — a purchase to make or a search to run, " +
-    "in the buyer's own words. The agent plans, picks an offer and pays for it " +
-    "under the mandate on its own; anything outside the mandate comes back " +
-    "needing the buyer. Use this for any new request. Do not use it to answer " +
-    "a pending escalation.",
+    "using the buyer's newest words verbatim. Never substitute, translate, " +
+    "summarize, classify, or infer a different product or category. The kernel chooses the matching mandate-scoped " +
+    "agent, including Rappi for groceries and delivery. The agent plans and " +
+    "proposes under that mandate; any payment remains behind the gate and the " +
+    "merchant bridge. Use this for any new request. Do not use it to answer a " +
+    "pending escalation.",
   parameters: z.object({
     request: z
       .string()
-      .describe('What the buyer wants, in full: "a flight to Cordoba, cheapest you can find". Keep their constraints — price, dates, destination.'),
+      .describe('Copy the buyer\'s newest request exactly. Preserve the product and all constraints. For example, "I wanna buy water bottle" must never become a wearable, smartwatch, fitness band, or another item.'),
   }),
   async execute({ request }) {
-    return sendTurn("request", request)
+    return sendTurn("request", takeBuyerRequest(request))
   },
 })
 

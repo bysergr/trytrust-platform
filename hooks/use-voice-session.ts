@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { RealtimeSession, type RealtimeItem } from "@openai/agents-realtime"
 
-import { resetConversation } from "@/lib/voice/conversation"
+import { recordBuyerRequest, resetConversation } from "@/lib/voice/conversation"
 import { towerControlAgent } from "@/lib/voice/agent"
 import { REALTIME_MODEL, REALTIME_VOICE } from "@/lib/voice/config"
 
@@ -125,6 +125,15 @@ export function useVoiceSession() {
 
       session.on("history_updated", (items) => setHistory([...items]))
 
+      // This is the finalized speech-to-text string, not an interpretation by
+      // the realtime model. Keep it as the source of truth if the model later
+      // calls ask_agent for this turn.
+      session.on("transport_event", (event) => {
+        if (event.type === "conversation.item.input_audio_transcription.completed") {
+          recordBuyerRequest(event.transcript)
+        }
+      })
+
       session.on("audio_start", () => setAgentSpeaking(true))
       session.on("audio_stopped", () => setAgentSpeaking(false))
       session.on("audio_interrupted", () => setAgentSpeaking(false))
@@ -226,6 +235,9 @@ export function useVoiceSession() {
   const sendText = useCallback((text: string) => {
     const trimmed = text.trim()
     if (!trimmed) return
+    // Typed requests are already exact. Record before the model sees them so
+    // an invented tool argument cannot alter the request crossing to kernel.
+    recordBuyerRequest(trimmed)
     sessionRef.current?.sendMessage(trimmed)
   }, [])
 

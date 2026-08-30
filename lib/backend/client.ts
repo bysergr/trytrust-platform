@@ -55,6 +55,28 @@ export async function askAgent(input: { text: string; sessionId?: string; agentI
   })
 }
 
+/**
+ * Start a buyer conversation through the kernel's deterministic dispatcher.
+ * The browser only supplies the request; the kernel chooses the active agent
+ * and its mandate (for example, the Rappi-scoped agent) from its own store.
+ */
+export async function dispatchAgent(input: { text: string; person: string }) {
+  if (!kernelUrl()) {
+    if (process.env.NODE_ENV === "production") throw new Error("KERNEL_NOT_CONFIGURED")
+    return {
+      ...mockAgentResponse(input.text),
+      dispatch: {
+        agent_id: process.env.DEFAULT_AGENT_ID ?? "agt_flights",
+        mandate_jti: "mdt_demo_active",
+      },
+    }
+  }
+  return kernelFetch<Record<string, unknown>>("/agent/dispatch", {
+    method: "POST",
+    body: JSON.stringify({ text: input.text, person: input.person }),
+  })
+}
+
 export async function getTranscript(sessionId: string) {
   return kernelFetch<Array<{ role: string; text: string; created_at: string }>>(`/agent/transcript?session_id=${encodeURIComponent(sessionId)}`)
 }

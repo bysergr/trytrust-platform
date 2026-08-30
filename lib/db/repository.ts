@@ -10,6 +10,13 @@ type MemoryState = {
   versions: Map<string, SiteVersionRecord[]>
 }
 
+export type AgentSessionBinding = {
+  ownerId: string
+  backendSessionId: string
+  agentId: string
+  mandateJti: string
+}
+
 const globalMemory = globalThis as unknown as { tryTrustMemory?: MemoryState }
 const memory: MemoryState = globalMemory.tryTrustMemory ?? {
   users: new Map(), sessions: new Map(), sites: new Map(), versions: new Map(),
@@ -37,9 +44,17 @@ export async function syncUser(user: HankoUser) {
     .onConflictDoUpdate({ target: users.id, set: { email: user.email, name: user.name, avatarUrl: user.avatarUrl, updatedAt: new Date() } })
 }
 
-export async function ownSession(ownerId: string, backendSessionId: string) {
+export async function ownSession(ownerId: string, backendSessionId: string): Promise<AgentSessionBinding | null> {
   if (memoryStoreEnabled()) return memory.sessions.get(`${ownerId}:${backendSessionId}`) ?? null
-  return (await db!.select().from(agentSessions).where(and(eq(agentSessions.ownerId, ownerId), eq(agentSessions.backendSessionId, backendSessionId))).limit(1))[0] ?? null
+  const row = (await db!.select().from(agentSessions).where(and(eq(agentSessions.ownerId, ownerId), eq(agentSessions.backendSessionId, backendSessionId))).limit(1))[0]
+  return row
+    ? {
+        ownerId: row.ownerId,
+        backendSessionId: row.backendSessionId,
+        agentId: row.agentId,
+        mandateJti: row.mandateJti,
+      }
+    : null
 }
 
 export async function saveSession(ownerId: string, backendSessionId: string, agentId: string, mandateJti: string) {
