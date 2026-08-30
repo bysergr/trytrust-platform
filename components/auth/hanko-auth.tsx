@@ -36,16 +36,28 @@ export function HankoAuth({ next = "/" }: { next?: string }) {
       if (cancelled) return
       hankoRef.current = hanko
       setPlatformPasskey(available)
-      cleanup = hanko.onSessionCreated(() => { window.location.assign(next) })
+      cleanup = hanko.onSessionCreated(() => {
+        window.sessionStorage.removeItem(FLOW_KEY)
+        window.location.assign(next)
+      })
 
       const activeFlow = window.sessionStorage.getItem(FLOW_KEY) as AuthFlow | null
       const params = new URLSearchParams(window.location.search)
-      if (activeFlow && (params.has("hanko_token") || params.has("error"))) {
+      const isCallback = params.has("hanko_token") || params.has("error")
+      if (activeFlow && isCallback) {
         setLoading("callback")
         await hanko.createState(activeFlow, {
           cacheKey: activeFlow === "login" ? LOGIN_CACHE : REGISTRATION_CACHE,
           loadFromCache: true,
         })
+        return
+      }
+
+      const session = await hanko.validateSession()
+      if (session.is_valid) {
+        window.location.assign(next)
+      } else if (!isCallback && hanko.getSessionToken()) {
+        await hanko.logout()
       }
     }).catch((cause) => {
       console.error("Hanko initialization failed", cause)
