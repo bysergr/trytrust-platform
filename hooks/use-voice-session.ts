@@ -43,7 +43,7 @@ function argsOf(rawItem: unknown): string {
   return args ? JSON.stringify(args, null, 2) : "{}"
 }
 
-export function useVoiceSession() {
+export function useVoiceSession({ initialSessionId }: { initialSessionId?: string } = {}) {
   const sessionRef = useRef<RealtimeSession | null>(null)
 
   const [status, setStatus] = useState<SessionStatus>("idle")
@@ -61,8 +61,7 @@ export function useVoiceSession() {
     setAgentSpeaking(false)
     setApprovals([])
     setMuted(false)
-    // The kernel keeps the run; hanging up just stops speaking for it.
-    resetConversation()
+    // Keep the kernel session available so text can continue after hanging up.
   }, [])
 
   // Closing the transport on unmount also releases the microphone.
@@ -73,7 +72,10 @@ export function useVoiceSession() {
 
     setError(null)
     setStatus("connecting")
-    resetConversation()
+    resetConversation(initialSessionId)
+    setHistory([])
+    setToolActivity([])
+    setApprovals([])
 
     try {
       // Step 1: the application server mints a short-lived client secret.
@@ -215,7 +217,7 @@ export function useVoiceSession() {
       sessionRef.current = null
       setStatus("idle")
     }
-  }, [])
+  }, [initialSessionId])
 
   const toggleMute = useCallback(() => {
     const session = sessionRef.current

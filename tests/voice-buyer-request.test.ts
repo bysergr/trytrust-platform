@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  getConversation,
   recordBuyerRequest,
   resetConversation,
   takeBuyerRequest,
@@ -26,6 +27,16 @@ describe("voice request fidelity", () => {
 
     expect(takeBuyerRequest("a water bottle")).toBe("una botella de agua")
     expect(takeBuyerRequest("find something to eat")).toBe("find something to eat")
+  })
+
+  it("can continue a text session when voice starts on the root page", () => {
+    resetConversation("ses_from_text")
+
+    expect(getConversation()).toMatchObject({
+      sessionId: "ses_from_text",
+      run: null,
+      awaitingHuman: false,
+    })
   })
 
   it("sends the raw buyer request to the kernel, not the tool argument", async () => {

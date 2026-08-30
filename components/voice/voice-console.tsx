@@ -1,50 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
-import type { RealtimeItem } from "@openai/agents-realtime"
 import { Mic, MicOff, Phone, PhoneOff, Square } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useVoiceSession } from "@/hooks/use-voice-session"
 import { getConversation, getServerConversation, subscribe } from "@/lib/voice/conversation"
+import { toVoiceTurns } from "@/lib/voice/transcript"
 import { cn } from "@/lib/utils"
-
-type Turn = { id: string; role: "user" | "assistant"; text: string }
-
-/**
- * Transcripts arrive incrementally and audio items carry no text until the
- * transcription lands, so items with nothing to show yet are skipped rather
- * than rendered as empty bubbles.
- */
-function toTurns(history: RealtimeItem[]): Turn[] {
-  const turns: Turn[] = []
-
-  for (const item of history) {
-    if (item.type !== "message") continue
-    if (item.role !== "user" && item.role !== "assistant") continue
-
-    const text = item.content
-      .map((part) => {
-        switch (part.type) {
-          case "input_text":
-          case "output_text":
-            return part.text
-          case "input_audio":
-          case "output_audio":
-            return part.transcript ?? ""
-          default:
-            return ""
-        }
-      })
-      .join(" ")
-      .trim()
-
-    if (text) turns.push({ id: item.itemId, role: item.role, text })
-  }
-
-  return turns
-}
 
 export function VoiceConsole() {
   const {
@@ -70,7 +34,7 @@ export function VoiceConsole() {
   const [draft, setDraft] = useState("")
   const transcriptRef = useRef<HTMLDivElement>(null)
 
-  const turns = useMemo(() => toTurns(history), [history])
+  const turns = useMemo(() => toVoiceTurns(history), [history])
   const connected = status === "connected"
 
   useEffect(() => {

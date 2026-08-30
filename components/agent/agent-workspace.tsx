@@ -1,14 +1,18 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowUp,
   Check,
   Copy,
+  Mic,
+  MicOff,
   PanelRight,
+  PhoneOff,
   Save,
   ShieldCheck,
+  Square,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { AgentChatResponse, GeneratedArtifact } from "@/lib/types"
@@ -18,6 +22,9 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { useVoiceSession } from "@/hooks/use-voice-session"
+import { getConversation, getServerConversation, subscribe } from "@/lib/voice/conversation"
+import { toVoiceTurns } from "@/lib/voice/transcript"
 import { cn } from "@/lib/utils"
 
 type Message = {
@@ -54,6 +61,14 @@ export function AgentWorkspace() {
   const [artifact, setArtifact] = useState<GeneratedArtifact | null>(null)
   const [view, setView] = useState<"chat" | "preview">("chat")
 
+  const voiceConversation = useSyncExternalStore(subscribe, getConversation, getServerConversation)
+  const activeSessionId = voiceConversation.sessionId ?? sessionId
+  const voice = useVoiceSession({ initialSessionId: activeSessionId })
+  const voiceTurns = useMemo(() => toVoiceTurns(voice.history), [voice.history])
+  const latestVoiceTurn = voiceTurns.at(-1)
+  const voiceConnected = voice.status === "connected"
+  const voiceActive = voice.status === "connecting" || voiceConnected
+
   // Resizable split pane state
   const [splitRatio, setSplitRatio] = useState(DEFAULT_SPLIT)
   const [isDragging, setIsDragging] = useState(false)
@@ -61,7 +76,7 @@ export function AgentWorkspace() {
   // Auto-scroll chat to latest message
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, sending])
+  }, [messages, sending, latestVoiceTurn?.text])
 
   // Live timer for loading state (Thinking)
   useEffect(() => {
@@ -112,6 +127,12 @@ export function AgentWorkspace() {
     const value = text.trim()
     if (!value || sending) return
     setText("")
+
+    if (voiceConnected) {
+      voice.sendText(value)
+      return
+    }
+
     setSending(true)
     setLoadingSeconds(0)
 
@@ -126,7 +147,7 @@ export function AgentWorkspace() {
       const response = await fetch("/api/agent/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: value, sessionId }),
+        body: JSON.stringify({ text: value, sessionId: activeSessionId }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.message ?? data.error ?? "Agent unavailable")
@@ -164,7 +185,7 @@ export function AgentWorkspace() {
     const response = await fetch("/api/sites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ artifact, sourceContext: { sessionId } }),
+      body: JSON.stringify({ artifact, sourceContext: { sessionId: activeSessionId } }),
     })
     if (!response.ok) return toast.error("Could not save this site")
     const site = await response.json()
@@ -238,6 +259,67 @@ export function AgentWorkspace() {
         {/* Floating Prompt Bar / Composer */}
         <div className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border/70 bg-background/95 p-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:p-4">
           <div className="mx-auto max-w-2xl">
+            {(voiceActive || voice.error) && (
+              <div className="mb-2 rounded-2xl border border-border/80 bg-card/95 px-3 py-2.5 shadow-sm" aria-live="polite">
+                <div className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-2 rounded-full",
+                      voice.status === "connecting" && "animate-pulse bg-amber-500",
+                      voiceConnected && !voice.agentSpeaking && "animate-pulse bg-emerald-500",
+                      voice.agentSpeaking && "animate-pulse bg-primary"
+                    )}
+                  />
+                  <span className="text-xs font-medium">
+                    {voice.status === "connecting"
+                      ? "Conectando voz…"
+                      : voice.agentSpeaking
+                        ? "El agente está respondiendo"
+                        : voice.muted
+                          ? "Micrófono pausado"
+                          : "Escuchando"}
+                  </span>
+                  {voice.agentSpeaking && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="ml-auto"
+                      onClick={voice.interrupt}
+                    >
+                      <Square />
+                      Detener
+                    </Button>
+                  )}
+                </div>
+
+                {latestVoiceTurn && (
+                  <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      {latestVoiceTurn.role === "user" ? "Tú: " : "Agente: "}
+                    </span>
+                    {latestVoiceTurn.text}
+                  </p>
+                )}
+
+                {voice.approvals.map((approval) => (
+                  <div key={approval.id} className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-2.5">
+                    <p className="min-w-0 truncate text-xs font-medium">Confirmar acción de voz</p>
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button size="xs" onClick={() => void voice.resolveApproval(approval, true)}>
+                        Aprobar
+                      </Button>
+                      <Button size="xs" variant="outline" onClick={() => void voice.resolveApproval(approval, false)}>
+                        Rechazar
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                {voice.error && <p role="alert" className="mt-2 text-xs text-destructive">{voice.error}</p>}
+              </div>
+            )}
+
             {/* AI Composer Box */}
             <div className="group relative rounded-3xl border border-border/80 bg-card/90 p-2.5 shadow-[0_12px_40px_-20px_rgba(29,78,216,0.2)] transition-all duration-300 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/10">
               <Textarea
@@ -254,7 +336,35 @@ export function AgentWorkspace() {
               />
 
               <div className="flex items-center justify-between px-1 pt-1">
-                <span className="px-2 font-mono text-[9px] text-muted-foreground">Enter to send · Shift+Enter for a new line</span>
+                <div className="flex min-w-0 items-center gap-1">
+                  <Button
+                    type="button"
+                    variant={voiceConnected ? "secondary" : "ghost"}
+                    size="icon-sm"
+                    aria-label={voiceConnected ? (voice.muted ? "Reactivar micrófono" : "Pausar micrófono") : "Iniciar conversación por voz"}
+                    aria-pressed={voiceConnected && !voice.muted}
+                    disabled={voice.status === "connecting"}
+                    onClick={() => voiceConnected ? voice.toggleMute() : void voice.connect()}
+                    className={cn(voiceConnected && !voice.muted && "text-primary")}
+                  >
+                    {voice.muted ? <MicOff /> : <Mic />}
+                  </Button>
+                  {voiceConnected && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Finalizar conversación por voz"
+                      onClick={voice.disconnect}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <PhoneOff />
+                    </Button>
+                  )}
+                  <span className="hidden truncate px-1 font-mono text-[9px] text-muted-foreground sm:inline">
+                    {voiceConnected ? "Puedes hablar o escribir" : "Enter to send · Shift+Enter for a new line"}
+                  </span>
+                </div>
 
                 <Button
                   aria-label="Send message"

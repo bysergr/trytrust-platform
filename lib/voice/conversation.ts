@@ -62,9 +62,9 @@ export function takeBuyerRequest(fallback: string): string {
   return request
 }
 
-/** New voice session, new conversation — the old run stays in the kernel. */
-export function resetConversation() {
-  state = EMPTY
+/** Start voice fresh or continue a text conversation already owned by this user. */
+export function resetConversation(sessionId?: string) {
+  state = sessionId ? { ...EMPTY, sessionId } : EMPTY
   pendingBuyerRequest = null
   for (const listener of listeners) listener()
 }
