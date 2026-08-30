@@ -44,6 +44,21 @@ export function connectManualToken(token: string): Promise<SessionStatus> {
   });
 }
 
+export type PaymentMethodView = {
+  id: string;
+  main_description: string | null;
+  secondary_description: string | null;
+  available: boolean;
+  selected: boolean;
+  cash: boolean;
+};
+
+export function fetchPaymentMethods(): Promise<PaymentMethodView[]> {
+  return bridgeFetch<{ methods: PaymentMethodView[] }>(
+    "/v1/rappi/payment/methods"
+  ).then((data) => data.methods);
+}
+
 export function disconnectRappi(): Promise<SessionStatus> {
   return bridgeFetch<SessionStatus>("/v1/rappi/session", { method: "DELETE" });
 }

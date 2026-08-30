@@ -7,8 +7,10 @@ import {
   BRIDGE_URL,
   connectManualToken,
   disconnectRappi,
+  fetchPaymentMethods,
   fetchSessionStatus,
   startRappiLogin,
+  type PaymentMethodView,
   type SessionStatus,
 } from "@/lib/bridge";
 
@@ -77,6 +79,14 @@ export function RappiConfigPanel({
   const [busy, setBusy] = useState(false);
   const [manualToken, setManualToken] = useState("");
   const [manualError, setManualError] = useState<string | null>(null);
+  const [methods, setMethods] = useState<PaymentMethodView[] | null>(null);
+
+  useEffect(() => {
+    if (status?.state !== "captured") return;
+    fetchPaymentMethods()
+      .then(setMethods)
+      .catch(() => setMethods(null));
+  }, [status?.state]);
 
   const startLogin = useCallback(async () => {
     setBusy(true);
@@ -215,6 +225,26 @@ export function RappiConfigPanel({
 
         {state === "captured" && (
           <section className="flex flex-col gap-3">
+            {methods && methods.length > 0 && (
+              <div className="rounded-xl border border-zinc-200 p-3 text-xs">
+                <p className="mb-2 font-medium text-zinc-700">Métodos de pago</p>
+                <ul className="space-y-1">
+                  {methods.map((method) => (
+                    <li key={method.id} className="flex items-center justify-between text-zinc-600">
+                      <span>
+                        {method.main_description ?? method.id}
+                        {method.cash && (
+                          <span className="ml-2 text-amber-600">(efectivo)</span>
+                        )}
+                      </span>
+                      {method.selected && (
+                        <span className="font-medium text-emerald-600">SELECTED</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="text-xs text-zinc-500">
               Listo: las compras del agente usarán esta sesión bajo mandato. Para cambiar de
               cuenta, desconecta y vuelve a hacer login.
